@@ -39,6 +39,13 @@ import {
   type LearningProgress,
 } from "../progress/progress";
 import { loadStoredProgress, saveStoredProgress } from "../progress/persistence";
+import {
+  apiKeyStatusLabel,
+  clearApiKey,
+  loadApiKeyStatus,
+  saveApiKey,
+  type ApiKeyStatus,
+} from "./settings";
 
 type LoadState =
   | { status: "loading"; error: null; graph: null; issues: GraphIssue[]; repoGitCommitHash: null }
@@ -118,6 +125,76 @@ function ModeTabs({
           {MODE_LABELS[item]}
         </button>
       ))}
+    </div>
+  );
+}
+
+function SettingsPanel({
+  status,
+  draftKey,
+  saving,
+  error,
+  onDraftKey,
+  onSave,
+  onClear,
+  onClose,
+}: {
+  status: ApiKeyStatus;
+  draftKey: string;
+  saving: boolean;
+  error: string | null;
+  onDraftKey: (value: string) => void;
+  onSave: () => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const desktopRequired = status.source === "desktop-required";
+  return (
+    <div className="absolute right-5 top-[62px] z-50 w-[360px] rounded-xl border border-border-subtle bg-white p-4 shadow-2xl">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">Claude API</div>
+          <div className="mt-1 text-xs text-text-muted">{apiKeyStatusLabel(status)}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-8 rounded-lg border border-border-subtle px-3 text-xs text-text-secondary"
+        >
+          关闭
+        </button>
+      </div>
+      <input
+        value={draftKey}
+        onChange={(event) => onDraftKey(event.target.value)}
+        disabled={desktopRequired}
+        className="mt-4 h-10 w-full rounded-lg border border-border-subtle bg-elevated px-3 font-mono text-xs outline-none focus:border-accent disabled:opacity-50"
+        placeholder={desktopRequired ? "桌面 App 中可保存 key" : "sk-ant-api03-..."}
+        type="password"
+      />
+      {error && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          {error}
+        </div>
+      )}
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={desktopRequired || saving || draftKey.trim().length === 0}
+          className="h-9 flex-1 rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {saving ? "保存中" : "保存 key"}
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={desktopRequired || saving || status.source === "env"}
+          className="h-9 flex-1 rounded-lg border border-border-subtle bg-white text-sm disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          清除本地 key
+        </button>
+      </div>
     </div>
   );
 }
@@ -799,6 +876,14 @@ function AppContent() {
   const [truthError, setTruthError] = useState<string | null>(null);
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [progressStorageWarning, setProgressStorageWarning] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [apiStatus, setApiStatus] = useState<ApiKeyStatus>({
+    configured: false,
+    source: "none",
+  });
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>({
     status: "loading",
     error: null,
@@ -835,6 +920,23 @@ function AppContent() {
       cancelled = true;
     };
   }, [setGraph]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadApiKeyStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setApiStatus(status);
+        setApiKeyError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setApiKeyError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -960,6 +1062,34 @@ function AppContent() {
     setGeneralizeLoading(false);
   };
 
+  const handleSaveApiKey = async () => {
+    setApiKeySaving(true);
+    setApiKeyError(null);
+    try {
+      const nextStatus = await saveApiKey(apiKeyDraft);
+      setApiStatus(nextStatus);
+      setApiKeyDraft("");
+    } catch (error: unknown) {
+      setApiKeyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setApiKeySaving(false);
+    }
+  };
+
+  const handleClearApiKey = async () => {
+    setApiKeySaving(true);
+    setApiKeyError(null);
+    try {
+      const nextStatus = await clearApiKey();
+      setApiStatus(nextStatus);
+      setApiKeyDraft("");
+    } catch (error: unknown) {
+      setApiKeyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setApiKeySaving(false);
+    }
+  };
+
   if (state.status === "loading") {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-root text-text-primary">
@@ -984,7 +1114,7 @@ function AppContent() {
 
   return (
     <main className="flex h-screen w-screen flex-col overflow-hidden bg-root text-text-primary">
-      <header className="flex h-[72px] shrink-0 items-center gap-5 border-b border-border-subtle bg-white px-5">
+      <header className="relative flex h-[72px] shrink-0 items-center gap-5 border-b border-border-subtle bg-white px-5">
         <div className="min-w-[220px]">
           <div className="text-sm font-semibold">费曼式代码导览</div>
           <div className="mt-1 font-mono text-[11px] text-text-muted">{state.graph.project.name}</div>
@@ -999,6 +1129,29 @@ function AppContent() {
         <div className="w-[340px] shrink-0">
           <SearchBar />
         </div>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((value) => !value)}
+          className={`h-9 shrink-0 rounded-lg border px-3 text-xs font-semibold ${
+            apiStatus.configured
+              ? "border-accent/20 bg-accent/5 text-accent"
+              : "border-border-subtle bg-elevated text-text-secondary"
+          }`}
+        >
+          API
+        </button>
+        {settingsOpen && (
+          <SettingsPanel
+            status={apiStatus}
+            draftKey={apiKeyDraft}
+            saving={apiKeySaving}
+            error={apiKeyError}
+            onDraftKey={setApiKeyDraft}
+            onSave={handleSaveApiKey}
+            onClear={handleClearApiKey}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
       </header>
 
       <WarningBanner issues={state.issues} />

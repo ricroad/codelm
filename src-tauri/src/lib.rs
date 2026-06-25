@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 pub mod graph;
 pub mod progress;
+pub mod settings;
 pub mod source;
 pub mod truth;
 
@@ -15,6 +16,9 @@ pub fn run() {
             commands::load_progress,
             commands::read_source,
             commands::read_truth_context,
+            commands::api_key_status,
+            commands::save_api_key,
+            commands::clear_api_key,
             commands::save_progress,
         ])
         .run(tauri::generate_context!())

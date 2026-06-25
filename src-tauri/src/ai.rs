@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 
+use crate::settings;
 use crate::truth::{build_truth_context, TruthContext, TruthError};
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -282,15 +283,20 @@ pub fn parse_generalize_feedback(raw: &str) -> Result<GeneralizeFeedback, AiErro
 fn api_key_from_env() -> Result<String, AiError> {
     std::env::var("ANTHROPIC_API_KEY")
         .or_else(|_| std::env::var("CLAUDE_API_KEY"))
-        .map_err(|_| AiError::MissingApiKey)
         .map(|key| key.trim().to_string())
         .and_then(|key| {
             if key.is_empty() {
-                Err(AiError::MissingApiKey)
+                Err(std::env::VarError::NotPresent)
             } else {
                 Ok(key)
             }
         })
+        .or_else(|_| {
+            settings::load_saved_api_key()
+                .map_err(|_| std::env::VarError::NotPresent)?
+                .ok_or(std::env::VarError::NotPresent)
+        })
+        .map_err(|_| AiError::MissingApiKey)
 }
 
 fn model_from_env() -> String {
