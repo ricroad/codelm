@@ -24,6 +24,7 @@ import {
 } from "./designState";
 import { graphSummary, loadGraphData, resolveGraphWarning } from "./graphData";
 import { buildLocalFeynmanFeedback, type FeynmanFeedback } from "../feynman/feedback";
+import { loadTruthContext, type TruthContext, type TruthEdge } from "../feynman/truth";
 import {
   createEmptyProgress,
   progressSummary,
@@ -333,9 +334,100 @@ function FeedbackCard({
   );
 }
 
+function EdgeList({ title, edges }: { title: string; edges: TruthEdge[] }) {
+  if (edges.length === 0) return null;
+  return (
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{title}</div>
+      <div className="mt-2 space-y-1">
+        {edges.slice(0, 4).map((edge) => (
+          <div
+            key={`${edge.relation}-${edge.otherNodeId}`}
+            className="rounded-lg bg-white px-3 py-2 text-xs leading-5 text-text-secondary"
+          >
+            <span className="font-mono text-accent">{edge.relation}</span>
+            <span className="mx-2 text-text-muted">→</span>
+            <span className="font-medium text-text-primary">{edge.otherNodeName}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TruthContextCard({
+  node,
+  truthContext,
+  truthLoading,
+  truthError,
+}: {
+  node: GraphNode;
+  truthContext: TruthContext | null;
+  truthLoading: boolean;
+  truthError: string | null;
+}) {
+  const truthNode = truthContext?.node;
+  const snippet = truthContext?.sourceSnippet;
+  return (
+    <div className="rounded-xl border border-border-subtle bg-elevated p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-accent">真相卡</div>
+        {truthContext?.layer && (
+          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] text-text-secondary">
+            {truthContext.layer.name}
+          </span>
+        )}
+      </div>
+      <div className="mt-2 text-lg font-semibold">{truthNode?.name ?? node.name}</div>
+      <p className="mt-2 text-sm leading-6 text-text-secondary">
+        {truthNode?.summary ?? node.summary}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(truthNode?.tags ?? node.tags).slice(0, 5).map((tag) => (
+          <span key={tag} className="rounded-full bg-white px-2.5 py-1 text-[11px] text-text-secondary">
+            {tag}
+          </span>
+        ))}
+      </div>
+      {truthLoading && (
+        <div className="mt-4 rounded-lg border border-border-subtle bg-white p-3 text-xs text-text-muted">
+          正在读取源码片段和依赖边
+        </div>
+      )}
+      {truthError && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          真相上下文暂不可用：{truthError}
+        </div>
+      )}
+      {snippet && (
+        <div className="mt-4 overflow-hidden rounded-lg border border-border-subtle bg-[#1d1d1f]">
+          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 font-mono text-[11px] text-white/65">
+            <span>{snippet.path}</span>
+            <span>
+              L{snippet.startLine}-L{snippet.endLine}
+            </span>
+          </div>
+          <pre className="max-h-44 overflow-auto p-3 font-mono text-[11px] leading-5 text-white">
+            {snippet.content}
+          </pre>
+        </div>
+      )}
+      {truthContext && (
+        <div className="mt-4 grid gap-3">
+          <EdgeList title="它依赖 / 调用" edges={truthContext.outgoingEdges} />
+          <EdgeList title="谁依赖它" edges={truthContext.incomingEdges} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeynmanPanel({
   node,
   variant,
+  truthContext,
+  truthLoading,
+  truthError,
   submitted,
   explanation,
   feedback,
@@ -347,6 +439,9 @@ function FeynmanPanel({
 }: {
   node: GraphNode | null;
   variant: LearnVariant;
+  truthContext: TruthContext | null;
+  truthLoading: boolean;
+  truthError: string | null;
   submitted: boolean;
   explanation: string;
   feedback: FeynmanFeedback | null;
@@ -374,18 +469,12 @@ function FeynmanPanel({
       <div className="min-h-0 flex-1 overflow-auto p-5">
         {node ? (
           <>
-            <div className="rounded-xl border border-border-subtle bg-elevated p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-accent">真相卡</div>
-              <div className="mt-2 text-lg font-semibold">{node.name}</div>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">{node.summary}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {node.tags.slice(0, 5).map((tag) => (
-                  <span key={tag} className="rounded-full bg-white px-2.5 py-1 text-[11px] text-text-secondary">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <TruthContextCard
+              node={node}
+              truthContext={truthContext}
+              truthLoading={truthLoading}
+              truthError={truthError}
+            />
             <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-accent">
               你来讲
             </label>
@@ -420,6 +509,9 @@ function FeynmanPanel({
 function LearnOverlay({
   variant,
   node,
+  truthContext,
+  truthLoading,
+  truthError,
   explanation,
   feedback,
   submitted,
@@ -430,6 +522,9 @@ function LearnOverlay({
 }: {
   variant: LearnVariant;
   node: GraphNode | null;
+  truthContext: TruthContext | null;
+  truthLoading: boolean;
+  truthError: string | null;
   explanation: string;
   feedback: FeynmanFeedback | null;
   submitted: boolean;
@@ -440,6 +535,12 @@ function LearnOverlay({
 }) {
   if (variant === "A" || !node) return null;
   const isDiff = variant === "C";
+  const checklist = [
+    `职责：${truthContext?.node.summary ?? node.summary}`,
+    truthContext?.layer ? `分层：${truthContext.layer.name} · ${truthContext.layer.description}` : null,
+    ...((truthContext?.outgoingEdges ?? []).slice(0, 2).map((edge) => `出边：${edge.relation} → ${edge.otherNodeName}`)),
+    ...((truthContext?.incomingEdges ?? []).slice(0, 2).map((edge) => `入边：${edge.otherNodeName} → ${edge.relation}`)),
+  ].filter(Boolean);
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#e8e8ed]/75 p-10 backdrop-blur-sm">
       <div className="grid max-h-full w-[min(980px,100%)] grid-cols-2 gap-5 overflow-auto rounded-2xl border border-border-subtle bg-white p-5 shadow-2xl">
@@ -449,9 +550,24 @@ function LearnOverlay({
           </div>
           <h3 className="mt-2 text-2xl font-semibold">{node.name}</h3>
           <p className="mt-3 text-sm leading-6 text-text-secondary">{node.summary}</p>
+          {truthLoading && (
+            <div className="mt-4 rounded-lg bg-elevated p-3 text-xs text-text-muted">
+              正在读取源码片段和依赖边
+            </div>
+          )}
+          {truthError && (
+            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+              真相上下文暂不可用：{truthError}
+            </div>
+          )}
+          {truthContext?.sourceSnippet && (
+            <pre className="mt-4 max-h-56 overflow-auto rounded-lg bg-[#1d1d1f] p-3 font-mono text-[11px] leading-5 text-white">
+              {truthContext.sourceSnippet.content}
+            </pre>
+          )}
           {isDiff && (
             <div className="mt-4 space-y-2">
-              {["职责", "分层位置", "关键依赖流向", "上下游影响"].map((item, index) => (
+              {(checklist.length > 0 ? checklist : ["职责", "分层位置", "关键依赖流向", "上下游影响"]).map((item, index) => (
                 <div key={item} className="rounded-lg bg-elevated p-3 text-sm">
                   {index + 1}. {item}
                 </div>
@@ -588,6 +704,9 @@ function AppContent() {
   const [explanation, setExplanation] = useState("");
   const [generalizeResponse, setGeneralizeResponse] = useState("");
   const [feedback, setFeedback] = useState<FeynmanFeedback | null>(null);
+  const [truthContext, setTruthContext] = useState<TruthContext | null>(null);
+  const [truthLoading, setTruthLoading] = useState(false);
+  const [truthError, setTruthError] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>({
     status: "loading",
     error: null,
@@ -626,9 +745,39 @@ function AppContent() {
   }, [setGraph]);
 
   const targetNode = state.graph ? nodeForLearning(state.graph, selectedNodeId, currentTourStep) : null;
+  const targetNodeId = targetNode?.id ?? null;
   const commitWarning = state.graph
     ? resolveGraphWarning(state.graph.project.gitCommitHash, state.repoGitCommitHash)
     : null;
+
+  useEffect(() => {
+    if (!state.graph || !targetNodeId) {
+      setTruthContext(null);
+      setTruthLoading(false);
+      setTruthError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setTruthLoading(true);
+    setTruthError(null);
+    loadTruthContext(state.graph, targetNodeId, controller.signal)
+      .then((context) => {
+        if (controller.signal.aborted) return;
+        setTruthContext(context);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setTruthContext(null);
+        setTruthError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return;
+        setTruthLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [state.graph, targetNodeId]);
 
   const handleMode = (mode: AppMode) => {
     dispatchDesign({ type: "setMode", mode });
@@ -734,6 +883,9 @@ function AppContent() {
           <LearnOverlay
             variant={designState.variant}
             node={targetNode}
+            truthContext={truthContext}
+            truthLoading={truthLoading}
+            truthError={truthError}
             explanation={explanation}
             feedback={feedback}
             submitted={designState.submitted}
@@ -752,6 +904,9 @@ function AppContent() {
           <FeynmanPanel
             node={targetNode}
             variant={designState.variant}
+            truthContext={truthContext}
+            truthLoading={truthLoading}
+            truthError={truthError}
             submitted={designState.submitted}
             explanation={explanation}
             feedback={feedback}
