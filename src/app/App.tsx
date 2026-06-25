@@ -23,6 +23,7 @@ import {
   type LearnVariant,
 } from "./designState";
 import { graphSummary, loadGraphData, resolveGraphWarning } from "./graphData";
+import { requestClaudeFeynmanFeedback } from "../feynman/ai";
 import { buildLocalFeynmanFeedback, type FeynmanFeedback } from "../feynman/feedback";
 import { loadTruthContext, type TruthContext, type TruthEdge } from "../feynman/truth";
 import {
@@ -428,6 +429,8 @@ function FeynmanPanel({
   truthContext,
   truthLoading,
   truthError,
+  feedbackLoading,
+  feedbackError,
   submitted,
   explanation,
   feedback,
@@ -442,6 +445,8 @@ function FeynmanPanel({
   truthContext: TruthContext | null;
   truthLoading: boolean;
   truthError: string | null;
+  feedbackLoading: boolean;
+  feedbackError: string | null;
   submitted: boolean;
   explanation: string;
   feedback: FeynmanFeedback | null;
@@ -487,11 +492,16 @@ function FeynmanPanel({
             <button
               type="button"
               onClick={onSubmit}
-              disabled={explanation.trim().length === 0}
+              disabled={feedbackLoading || explanation.trim().length === 0}
               className="mt-3 h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              对齐一下
+              {feedbackLoading ? "正在对齐" : "对齐一下"}
             </button>
+            {feedbackError && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                {feedbackError}
+              </div>
+            )}
             {submitted && feedback && (
               <FeedbackCard feedback={feedback} onReset={onReset} onMastered={onMastered} />
             )}
@@ -512,6 +522,8 @@ function LearnOverlay({
   truthContext,
   truthLoading,
   truthError,
+  feedbackLoading,
+  feedbackError,
   explanation,
   feedback,
   submitted,
@@ -525,6 +537,8 @@ function LearnOverlay({
   truthContext: TruthContext | null;
   truthLoading: boolean;
   truthError: string | null;
+  feedbackLoading: boolean;
+  feedbackError: string | null;
   explanation: string;
   feedback: FeynmanFeedback | null;
   submitted: boolean;
@@ -588,10 +602,16 @@ function LearnOverlay({
           <button
             type="button"
             onClick={onSubmit}
-            className="mt-3 h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white"
+            disabled={feedbackLoading || explanation.trim().length === 0}
+            className="mt-3 h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            生成对齐卡
+            {feedbackLoading ? "正在对齐" : "生成对齐卡"}
           </button>
+          {feedbackError && (
+            <div className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+              {feedbackError}
+            </div>
+          )}
           {submitted && feedback && (
             <FeedbackCard feedback={feedback} onReset={onReset} onMastered={onMastered} />
           )}
@@ -704,6 +724,8 @@ function AppContent() {
   const [explanation, setExplanation] = useState("");
   const [generalizeResponse, setGeneralizeResponse] = useState("");
   const [feedback, setFeedback] = useState<FeynmanFeedback | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [truthContext, setTruthContext] = useState<TruthContext | null>(null);
   const [truthLoading, setTruthLoading] = useState(false);
   const [truthError, setTruthError] = useState<string | null>(null);
@@ -788,9 +810,18 @@ function AppContent() {
     setTourStep(index);
   };
 
-  const handleLearnSubmit = () => {
+  const handleLearnSubmit = async () => {
     if (!targetNode) return;
-    const nextFeedback = buildLocalFeynmanFeedback(targetNode, explanation);
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+    let nextFeedback: FeynmanFeedback;
+    try {
+      nextFeedback = await requestClaudeFeynmanFeedback(targetNode.id, explanation);
+    } catch (error: unknown) {
+      nextFeedback = buildLocalFeynmanFeedback(targetNode, explanation);
+      const message = error instanceof Error ? error.message : String(error);
+      setFeedbackError(`真 Claude 暂不可用，已先用本地草评：${message}`);
+    }
     setFeedback(nextFeedback);
     setProgress((current) =>
       recordAttempt(
@@ -801,6 +832,7 @@ function AppContent() {
       ),
     );
     dispatchDesign({ type: "setSubmitted", submitted: true });
+    setFeedbackLoading(false);
   };
 
   const handleMastered = () => {
@@ -886,6 +918,8 @@ function AppContent() {
             truthContext={truthContext}
             truthLoading={truthLoading}
             truthError={truthError}
+            feedbackLoading={feedbackLoading}
+            feedbackError={feedbackError}
             explanation={explanation}
             feedback={feedback}
             submitted={designState.submitted}
@@ -907,6 +941,8 @@ function AppContent() {
             truthContext={truthContext}
             truthLoading={truthLoading}
             truthError={truthError}
+            feedbackLoading={feedbackLoading}
+            feedbackError={feedbackError}
             submitted={designState.submitted}
             explanation={explanation}
             feedback={feedback}
