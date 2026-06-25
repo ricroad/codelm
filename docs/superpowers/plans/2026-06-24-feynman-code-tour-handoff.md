@@ -28,9 +28,9 @@
 | v1 范围 | **全部还原**：3 模式（概览/学习/泛化）× 6 变体（A/B/C + X/Y/Z） |
 | 重新分析代码库 | **不做**（UA 重跑需 AI 在场、无 CLI）。更新图谱=用户重跑 `/understand`，App 重读 JSON |
 | 移动端/响应式 | 不做（用户既定偏好：纯 Web 桌面端） |
-| 项目落位 | **本仓库 `codelm` 根即 App**（本地 `画布项目/codelm/`，远端 `github.com/ricroad/codelm`），含 `src/`(React) + `src-tauri/`(Rust) + `docs/` |
+| 项目落位 | **仓库根即 App**：本地文件夹 `~/Desktop/yanzu/code-reading/`，远端 `github.com/ricroad/codelm`（本地名≠远端名,正常），含 `src/`(React) + `src-tauri/`(Rust) + `docs/` |
 
-待定小决策（有默认值，不阻塞）：API key 存法（默认 keychain）；默认模型 `claude-opus-4-8`（可切 sonnet 省钱）；默认变体 A/X；repo 根默认 `../frontend-repo`。
+待定小决策（有默认值，不阻塞）：API key 存法（默认 keychain）；默认模型 `claude-opus-4-8`（可切 sonnet 省钱）；默认变体 A/X；repo 根默认 `../画布项目/frontend-repo`。
 
 ---
 
@@ -60,7 +60,7 @@ TourStep  = { order, title, description, nodeIds[], languageLesson? }
 
 ## 3. 当前工作区状态 + 先跑这些验证
 
-工作区：`/Users/yufeng.he/Desktop/yanzu/画布项目`（这个外层目录**不是** git 仓库；frontend-repo / ai-canvas-repo 各自是独立 repo）。**本 App 的 git 仓库是 `画布项目/codelm/`**（远端 `github.com/ricroad/codelm`，SSH 推送），设计文档/交接都在其中 `docs/superpowers/` 下。
+目录关系（都在 `~/Desktop/yanzu/` 下）：`画布项目/`(旧工作区,**不是** git 仓库,内含独立的 frontend-repo / ai-canvas-repo) 与 **`code-reading/`(本 App 的 git 仓库)** 同级。本 App 远端 `github.com/ricroad/codelm`(SSH 推送);设计文档/交接在 `code-reading/docs/superpowers/` 下。被导览的 frontend-repo 在 `../画布项目/frontend-repo`。
 
 **接手先跑（只读，别重跑分析）**：
 ```bash
@@ -77,8 +77,8 @@ $NODE -e 'const g=require("./.understand-anything/knowledge-graph.json");console
 - 知识图谱：`frontend-repo/.understand-anything/`（`knowledge-graph.json` 1.4M、`meta.json`、`fingerprints.json` 804K、`intermediate/scan-result.json`）。analyzedAt 2026-06-23。**`.understand-anything/` 未跟踪，别删。**
 - 设计文档：`docs/superpowers/specs/2026-06-24-feynman-code-tour-design.md`（权威）。
 - 本交接文档：`docs/superpowers/plans/2026-06-24-feynman-code-tour-handoff.md`。
-- git 仓库 `codelm` 已建好并推到 `github.com/ricroad/codelm`（目前只含这两份 docs + README + .gitignore）。
-- **尚不存在**：App 代码（`codelm` 根下的 `src/` + `src-tauri/`）——从零搭，这是你的活。
+- git 仓库已建好并推到 `github.com/ricroad/codelm`（本地 `code-reading/`，目前只含这两份 docs + README + .gitignore）。
+- **尚不存在**：App 代码（`code-reading/` 根下的 `src/` + `src-tauri/`）——从零搭，这是你的活。
 
 **UA dashboard 现状**：有个 `screen` 会话 `ua-dashboard` 在跑 Vite :5173（node pid 见 `lsof -nP -iTCP:5173`），但根路径返回 **404**（token 在 `.understand-anything/dashboard.url`，当前 `6ba7980d768cca6b149d9d16e79a1a01`；旧 token `4a40c938...` 已死别用）。**这个 dashboard 是 UA 自带查看器，跟我们要做的 App 是两回事，不影响**；想参考它长啥样可修好它（看 `understand-dashboard` skill：它用 `GRAPH_DIR=<repo> npx vite` 起，数据走 token-gated 的 Vite 中间件，见 `packages/dashboard/vite.config.ts`）。要停：`screen -S ua-dashboard -X quit`。
 
@@ -131,7 +131,7 @@ A/B/C 三变体 = 同一份 feedback 的三种展示皮（B/C 是图谱上的 ov
 ## 6. 坑 / 约束（必读，踩了费时间）
 
 1. **node 不在默认 PATH**：用 `/Users/yufeng.he/.local/node/bin/node`（v24.16.0）。整套工具链在 `~/.local`。
-2. **只在 `codelm/` 这个 repo 里提交**：外层 `画布项目` 不是 git 仓库,且其下 frontend-repo/ai-canvas-repo 是独立 repo——别在外层 `git init`,会把它们和大文件全卷进去。本项目一切提交都在 `画布项目/codelm/`。
+2. **只在 `code-reading/` 这个 repo 里提交**：隔壁 `画布项目` 不是 git 仓库,且其下 frontend-repo/ai-canvas-repo 是独立 repo——别在那边 `git init`,会把它们和大文件全卷进去。本项目一切提交都在 `~/Desktop/yanzu/code-reading/`。
 3. **别重跑 `/understand`**：分析已完成且昂贵；图谱直接读快照。`.understand-anything/` 未跟踪、别删。
 4. **UA 无 CLI/API**：所有 AI 能力(费曼/泛化)必须自接 Claude API，不能指望 UA 跑时给你算。
 5. **API key 不进 git、不进渲染层**：只在 Rust 侧/keychain。
@@ -147,5 +147,5 @@ A/B/C 三变体 = 同一份 feedback 的三种展示皮（B/C 是图谱上的 ov
 
 1. 先按 §3 跑验证命令，确认状态与本文一致。
 2. 读权威设计文档 `docs/superpowers/specs/2026-06-24-feynman-code-tour-design.md`。
-3. 用 `writing-plans` skill 把 **P0** 拆成实现计划（建议 P0 第一步：确认 Tauri/Rust 工具链 → 在 `codelm/` 仓库根初始化 Tauri 脚手架(`src/` + `src-tauri/`) → vendor UA dashboard 最小可渲染子集 → 读真实图谱画出 10 层）。
+3. 用 `writing-plans` skill 把 **P0** 拆成实现计划（建议 P0 第一步：确认 Tauri/Rust 工具链 → 在 `code-reading/` 仓库根初始化 Tauri 脚手架(`src/` + `src-tauri/`) → vendor UA dashboard 最小可渲染子集 → 读真实图谱画出 10 层）。
 4. 按 `executing-plans` / TDD 推进，每步验证后再说完成，向用户用大白话汇报。

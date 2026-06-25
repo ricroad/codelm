@@ -1,4 +1,6 @@
-# codelm — 费曼式代码导览（Feynman Code Tour）
+# code-reading — 费曼式代码导览（Feynman Code Tour）
+
+> 本地文件夹 `code-reading`；GitHub 远端仓库名 `ricroad/codelm`（两者不同名,正常）。
 
 一个**本地桌面应用（Tauri + React）**：读取 [Understand Anything](https://github.com/) 为某个真实代码库生成的知识图谱，用**费曼学习法**带人学懂这套代码——
 图谱里挑一条线 → 看真相（文件摘要 + 真实源码）→ 用自己的话讲回去 → **真 Claude API 对照打分、对齐、追问** → 往复直到学会；并能把学到的模式**泛化**到新场景。
@@ -26,7 +28,7 @@ Tauri(.app)
 
 ## 外部依赖（不在本仓库内）
 
-- 被导览的代码库及其知识图谱：默认 `../frontend-repo`（含 `.understand-anything/knowledge-graph.json`，由 `/understand` 生成）。路径可在设置里改。
+- 被导览的代码库及其知识图谱：默认 `../画布项目/frontend-repo`（含 `.understand-anything/knowledge-graph.json`，由 `/understand` 生成）。本仓库本地在 `~/Desktop/yanzu/code-reading/`，frontend-repo 在隔壁 `~/Desktop/yanzu/画布项目/frontend-repo/`。路径可在设置里改。
 - 重新分析代码库需 Understand Anything（要 AI 在场，无 CLI）；本 App 只**消费**图谱快照。
 
 ## 第三方出处与许可
