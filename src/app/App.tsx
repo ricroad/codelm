@@ -26,6 +26,11 @@ import { graphSummary, loadGraphData, resolveGraphWarning } from "./graphData";
 import { requestClaudeFeynmanFeedback } from "../feynman/ai";
 import { buildLocalFeynmanFeedback, type FeynmanFeedback } from "../feynman/feedback";
 import { loadTruthContext, type TruthContext, type TruthEdge } from "../feynman/truth";
+import { requestClaudeGeneralizeFeedback } from "../generalize/ai";
+import {
+  buildLocalGeneralizeFeedback,
+  type GeneralizeFeedback,
+} from "../generalize/feedback";
 import {
   createEmptyProgress,
   progressSummary,
@@ -633,6 +638,9 @@ function GeneralizePanel({
   genVar,
   submitted,
   response,
+  feedback,
+  feedbackLoading,
+  feedbackError,
   onGenVar,
   onResponse,
   onSubmit,
@@ -641,12 +649,18 @@ function GeneralizePanel({
   genVar: GeneralizeVariant;
   submitted: boolean;
   response: string;
+  feedback: GeneralizeFeedback | null;
+  feedbackLoading: boolean;
+  feedbackError: string | null;
   onGenVar: (value: GeneralizeVariant) => void;
   onResponse: (value: string) => void;
   onSubmit: () => void;
   onReset: () => void;
 }) {
   const selected = GENERALIZE_VARIANTS[genVar];
+  const percent = feedback
+    ? Math.round((feedback.coverage.covered / Math.max(feedback.coverage.total, 1)) * 100)
+    : 0;
   return (
     <aside className="flex min-h-0 flex-col border-l border-border-subtle bg-surface">
       <div className="border-b border-border-subtle p-5">
@@ -673,21 +687,64 @@ function GeneralizePanel({
         <button
           type="button"
           onClick={onSubmit}
-          disabled={response.trim().length === 0}
+          disabled={feedbackLoading || response.trim().length === 0}
           className="mt-3 h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          核对迁移能力
+          {feedbackLoading ? "正在核对" : "核对迁移能力"}
         </button>
-        {submitted && (
+        {feedbackError && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+            {feedbackError}
+          </div>
+        )}
+        {submitted && feedback && (
           <div className="mt-4 rounded-xl border border-border-subtle bg-white p-4 shadow-sm">
-            <div className="text-sm font-semibold">覆盖到主链路 · 继续补后果链</div>
-            <div className="mt-3 space-y-2 text-sm text-text-secondary">
-              <div>✓ 讲到了用户意图如何进入画布链路。</div>
-              <div>✓ 提到了生成命令和 UI/业务逻辑之间的边界。</div>
-              <div>! 还需要补充失败状态、资产回写和可测试契约。</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold">{feedback.verdict}</div>
+              <div className="font-mono text-xs text-accent">
+                {feedback.coverage.covered}/{feedback.coverage.total} · {percent}%
+              </div>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-elevated">
+              <div className="h-full bg-accent" style={{ width: `${percent}%` }} />
+            </div>
+            <div className="mt-4 space-y-2 text-sm text-text-secondary">
+              {feedback.points.map((point, index) => (
+                <div key={`${point.kind}-${index}`} className="flex gap-2 leading-6">
+                  <span
+                    className={`mt-1 h-4 w-4 shrink-0 rounded-full text-center text-[10px] leading-4 text-white ${
+                      point.kind === "hit"
+                        ? "bg-emerald-500"
+                        : point.kind === "deviation"
+                          ? "bg-amber-500"
+                          : "bg-rose-500"
+                    }`}
+                  >
+                    {point.kind === "hit" ? "✓" : point.kind === "deviation" ? "!" : "×"}
+                  </span>
+                  <span>{point.text}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 rounded-lg bg-elevated p-3 text-sm leading-6 text-text-secondary">
+              {feedback.mentorComment}
+            </p>
+            {genVar === "Z" && feedback.newcomerReply && (
+              <div className="mt-3 rounded-lg border border-accent/20 bg-accent/5 p-3 text-sm leading-6">
+                <div className="text-xs font-semibold text-accent">
+                  {feedback.understood ? "新人已能复述" : "新人继续追问"}
+                </div>
+                <div className="mt-1 text-text-primary">{feedback.newcomerReply}</div>
+              </div>
+            )}
+            <div className="mt-3 rounded-lg border border-accent/20 bg-accent/5 p-3 text-sm">
+              <div className="text-xs font-semibold text-accent">
+                {feedback.followUp.targetConcept}
+              </div>
+              <div className="mt-1 text-text-primary">{feedback.followUp.question}</div>
             </div>
             <button type="button" onClick={onReset} className="mt-4 h-9 w-full rounded-lg border border-border-subtle bg-white text-sm">
-              再推演一次
+              {genVar === "Z" ? "再教一遍" : "再推演一次"}
             </button>
           </div>
         )}
@@ -734,6 +791,9 @@ function AppContent() {
   const [feedback, setFeedback] = useState<FeynmanFeedback | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [generalizeFeedback, setGeneralizeFeedback] = useState<GeneralizeFeedback | null>(null);
+  const [generalizeLoading, setGeneralizeLoading] = useState(false);
+  const [generalizeError, setGeneralizeError] = useState<string | null>(null);
   const [truthContext, setTruthContext] = useState<TruthContext | null>(null);
   const [truthLoading, setTruthLoading] = useState(false);
   const [truthError, setTruthError] = useState<string | null>(null);
@@ -881,6 +941,25 @@ function AppContent() {
     setProgress((current) => recordMastery(current, targetNode.id, feedback.weakPoints));
   };
 
+  const handleGeneralizeSubmit = async () => {
+    setGeneralizeLoading(true);
+    setGeneralizeError(null);
+    let nextFeedback: GeneralizeFeedback;
+    try {
+      nextFeedback = await requestClaudeGeneralizeFeedback(
+        designState.genVar,
+        generalizeResponse,
+      );
+    } catch (error: unknown) {
+      nextFeedback = buildLocalGeneralizeFeedback(designState.genVar, generalizeResponse);
+      const message = error instanceof Error ? error.message : String(error);
+      setGeneralizeError(`真 Claude 暂不可用，已先用本地泛化草评：${message}`);
+    }
+    setGeneralizeFeedback(nextFeedback);
+    dispatchDesign({ type: "setGeneralizeSubmitted", genSubmitted: true });
+    setGeneralizeLoading(false);
+  };
+
   if (state.status === "loading") {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-root text-text-primary">
@@ -1005,10 +1084,21 @@ function AppContent() {
             genVar={designState.genVar}
             submitted={designState.genSubmitted}
             response={generalizeResponse}
-            onGenVar={(genVar) => dispatchDesign({ type: "setGeneralizeVariant", genVar })}
+            feedback={generalizeFeedback}
+            feedbackLoading={generalizeLoading}
+            feedbackError={generalizeError}
+            onGenVar={(genVar) => {
+              setGeneralizeFeedback(null);
+              setGeneralizeError(null);
+              dispatchDesign({ type: "setGeneralizeVariant", genVar });
+            }}
             onResponse={setGeneralizeResponse}
-            onSubmit={() => dispatchDesign({ type: "setGeneralizeSubmitted", genSubmitted: true })}
-            onReset={() => dispatchDesign({ type: "resetGeneralize" })}
+            onSubmit={handleGeneralizeSubmit}
+            onReset={() => {
+              setGeneralizeFeedback(null);
+              setGeneralizeError(null);
+              dispatchDesign({ type: "resetGeneralize" });
+            }}
           />
         )}
 

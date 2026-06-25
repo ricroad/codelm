@@ -1,4 +1,7 @@
-use crate::ai::{request_feynman_feedback, FeynmanFeedback};
+use crate::ai::{
+    request_feynman_feedback, request_generalize_feedback, FeynmanFeedback, GeneralizeFeedback,
+    GeneralizeMode,
+};
 use crate::config::{default_graph_path, default_repo_root};
 use crate::graph::{load_graph_from_paths, GraphLoadResponse};
 use crate::progress::{
@@ -36,6 +39,20 @@ pub async fn ai_feynman_feedback(
     let repo_root = default_repo_root();
     let graph_path = default_graph_path(&repo_root);
     request_feynman_feedback(&repo_root, &graph_path, &node_id, &user_explanation)
+        .await
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_generalize_feedback(
+    gen_var: String,
+    user_response: String,
+) -> Result<GeneralizeFeedback, String> {
+    let repo_root = default_repo_root();
+    let graph_path = default_graph_path(&repo_root);
+    let mode = GeneralizeMode::from_str(&gen_var)
+        .ok_or_else(|| format!("unknown generalize variant: {gen_var}"))?;
+    request_generalize_feedback(&graph_path, mode, &user_response)
         .await
         .map_err(|err| err.to_string())
 }

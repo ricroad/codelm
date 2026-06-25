@@ -10,6 +10,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::ai_feynman_feedback,
+            commands::ai_generalize_feedback,
             commands::load_graph,
             commands::load_progress,
             commands::read_source,
