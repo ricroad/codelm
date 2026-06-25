@@ -11,7 +11,8 @@
 ## 状态
 
 - ✅ 需求与设计已对齐（brainstorming 完成）。
-- ⬜ App 代码（`src/` + `src-tauri/`）尚未开始——下一步从 P0 地基起。
+- ✅ P0 地基已起：Tauri + React + vendored UA 看图引擎 + 真实图谱加载 + 安全源码读取。
+- ⬜ P1 待做：费曼讲解输入、Claude API 对齐打分、A/B/C 三变体。
 
 ## 从哪开始读
 
@@ -31,9 +32,38 @@ Tauri(.app)
 - 被导览的代码库及其知识图谱：默认 `../画布项目/frontend-repo`（含 `.understand-anything/knowledge-graph.json`，由 `/understand` 生成）。本仓库本地在 `~/Desktop/yanzu/code-reading/`，frontend-repo 在隔壁 `~/Desktop/yanzu/画布项目/frontend-repo/`。路径可在设置里改。
 - 重新分析代码库需 Understand Anything（要 AI 在场，无 CLI）；本 App 只**消费**图谱快照。
 
+## 本地运行
+
+> Node 在本机路径：`/Users/yufeng.he/.local/node/bin/`。Rust 工具链通过 rustup 安装后，当前 shell 需先 `. "$HOME/.cargo/env"`。
+
+```bash
+/Users/yufeng.he/.local/node/bin/pnpm install
+/Users/yufeng.he/.local/node/bin/pnpm dev
+```
+
+浏览器开发地址：`http://127.0.0.1:5174/`。
+
+Tauri:
+
+```bash
+. "$HOME/.cargo/env"
+/Users/yufeng.he/.local/node/bin/pnpm tauri dev
+/Users/yufeng.he/.local/node/bin/pnpm tauri build
+```
+
+当前默认读取 `../画布项目/frontend-repo/.understand-anything/knowledge-graph.json`。如果该 repo 当前 commit 与图谱记录的 commit 不一致，界面会显示黄色提示；图谱仍可看，但源码预览可能和图谱摘要不完全一致。
+
+## P0 已有能力
+
+- 读取真实 `storyboard-copilot` 图谱：1523 nodes / 2864 edges / 10 layers / 12 tour steps。
+- 渲染 UA dashboard 的层级图谱、搜索、文件树、节点详情和源码面板。
+- React 开发模式下通过 Vite 本地中间件读取图谱/源码。
+- Tauri 模式下通过 Rust command 读取图谱/源码。
+- Rust `read_source` 会拒绝绝对路径、`..` 越权、图谱外文件、二进制文件和超过 1 MiB 的文件。
+
 ## 第三方出处与许可
 
-`src/vendor/ua/` 下的看图引擎将快照自 **Understand Anything 插件 v2.8.1**（`@understand-anything`）。落地 vendor 时在该目录注明出处、版本与原许可证。
+`src/vendor/ua/` 下的看图引擎快照自 **Understand Anything 插件 v2.8.1**（`@understand-anything`）。vendor 目录内的 `README.md` 注明了来源与版本。
 
 ## 安全
 

@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@source "./**/*.{ts,tsx,js,jsx,html}";
+@source "../index.html";
+
+@theme {
+  --color-root: #e8e8ed;
+  --color-surface: #ffffff;
+  --color-elevated: #f5f5f7;
+  --color-panel: #fbfbfd;
+
+  --color-accent: #0066cc;
+  --color-accent-dim: #3b82c4;
+  --color-accent-bright: #0a84ff;
+
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #515154;
+  --color-text-muted: #86868b;
+
+  --color-border-subtle: rgba(0, 0, 0, 0.1);
+  --color-border-medium: rgba(0, 0, 0, 0.18);
+
+  --color-node-file: #0066cc;
+  --color-node-function: #30a46c;
+  --color-node-class: #8e5cf7;
+  --color-node-module: #c18401;
+  --color-node-concept: #d6409f;
+  --color-node-config: #0891b2;
+  --color-node-document: #5b5bd6;
+  --color-node-service: #dc6803;
+  --color-node-table: #12a594;
+  --color-node-endpoint: #f97316;
+  --color-node-pipeline: #e11d48;
+  --color-node-schema: #ca8a04;
+  --color-node-resource: #4f46e5;
+  --color-node-article: #0066cc;
+  --color-node-entity: #7c3aed;
+  --color-node-topic: #0f766e;
+  --color-node-claim: #16a34a;
+  --color-node-source: #64748b;
+
+  --color-diff-changed: #dc2626;
+  --color-diff-affected: #d97706;
+  --color-diff-changed-dim: rgba(220, 38, 38, 0.18);
+  --color-diff-affected-dim: rgba(217, 119, 6, 0.18);
+
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-bg-heavy: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-heavy: rgba(0, 0, 0, 0.12);
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+
+  --glow-accent: rgba(0, 102, 204, 0.14);
+  --glow-accent-strong: rgba(0, 102, 204, 0.24);
+  --glow-accent-pulse: rgba(0, 102, 204, 0.36);
+
+  --color-edge: rgba(82, 82, 91, 0.36);
+  --color-edge-dim: rgba(82, 82, 91, 0.1);
+  --color-edge-dot: rgba(82, 82, 91, 0.16);
+
+  --color-accent-overlay-bg: rgba(0, 102, 204, 0.08);
+  --color-accent-overlay-border: rgba(0, 102, 204, 0.22);
+
+  --kbd-bg: rgba(0, 102, 204, 0.08);
+
+  --font-serif: "SF Pro Display", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: var(--font-sans);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-root);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
