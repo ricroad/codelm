@@ -2,6 +2,7 @@ pub mod ai;
 pub mod commands;
 pub mod config;
 pub mod graph;
+pub mod progress;
 pub mod source;
 pub mod truth;
 
@@ -10,8 +11,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::ai_feynman_feedback,
             commands::load_graph,
+            commands::load_progress,
             commands::read_source,
             commands::read_truth_context,
+            commands::save_progress,
         ])
         .run(tauri::generate_context!())
         .expect("error while running code-reading");

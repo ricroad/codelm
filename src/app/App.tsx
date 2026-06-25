@@ -33,6 +33,7 @@ import {
   recordMastery,
   type LearningProgress,
 } from "../progress/progress";
+import { loadStoredProgress, saveStoredProgress } from "../progress/persistence";
 
 type LoadState =
   | { status: "loading"; error: null; graph: null; issues: GraphIssue[]; repoGitCommitHash: null }
@@ -191,10 +192,12 @@ function ProgressRail({
   graph,
   progress,
   commitWarning,
+  storageWarning,
 }: {
   graph: KnowledgeGraph;
   progress: LearningProgress;
   commitWarning: string | null;
+  storageWarning: string | null;
 }) {
   const summary = progressSummary(graph, progress);
   return (
@@ -229,6 +232,11 @@ function ProgressRail({
         {commitWarning && (
           <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
             {commitWarning}
+          </div>
+        )}
+        {storageWarning && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+            {storageWarning}
           </div>
         )}
         <div className="mt-5 text-xs font-semibold uppercase tracking-wide text-accent">文件树</div>
@@ -729,6 +737,8 @@ function AppContent() {
   const [truthContext, setTruthContext] = useState<TruthContext | null>(null);
   const [truthLoading, setTruthLoading] = useState(false);
   const [truthError, setTruthError] = useState<string | null>(null);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [progressStorageWarning, setProgressStorageWarning] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>({
     status: "loading",
     error: null,
@@ -765,6 +775,37 @@ function AppContent() {
       cancelled = true;
     };
   }, [setGraph]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadStoredProgress()
+      .then((storedProgress) => {
+        if (cancelled) return;
+        setProgress(storedProgress);
+        setProgressStorageWarning(null);
+        setProgressLoaded(true);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setProgressStorageWarning(
+          `学习进度读取失败，本次先使用临时进度：${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!progressLoaded) return;
+    saveStoredProgress(progress)
+      .then(() => setProgressStorageWarning(null))
+      .catch((error: unknown) => {
+        setProgressStorageWarning(
+          `学习进度保存失败，本次刷新后可能丢失：${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }, [progress, progressLoaded]);
 
   const targetNode = state.graph ? nodeForLearning(state.graph, selectedNodeId, currentTourStep) : null;
   const targetNodeId = targetNode?.id ?? null;
@@ -931,7 +972,12 @@ function AppContent() {
         </div>
 
         {designState.mode === "overview" && (
-          <ProgressRail graph={state.graph} progress={progress} commitWarning={commitWarning} />
+          <ProgressRail
+            graph={state.graph}
+            progress={progress}
+            commitWarning={commitWarning}
+            storageWarning={progressStorageWarning}
+          />
         )}
 
         {designState.mode === "learn" && (

@@ -242,7 +242,11 @@ pub fn build_truth_context(
     let node_value = graph
         .get("nodes")
         .and_then(Value::as_array)
-        .and_then(|nodes| nodes.iter().find(|node| node.get("id").and_then(Value::as_str) == Some(node_id)))
+        .and_then(|nodes| {
+            nodes
+                .iter()
+                .find(|node| node.get("id").and_then(Value::as_str) == Some(node_id))
+        })
         .ok_or(TruthError::NodeNotFound)?;
     let node = to_truth_node(node_value);
     let layer = graph_layer_for_node(&graph, node_id);

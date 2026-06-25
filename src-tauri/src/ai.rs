@@ -70,13 +70,17 @@ fn edge_lines(context: &TruthContext) -> String {
     for edge in &context.outgoing_edges {
         lines.push(format!(
             "outgoing: {} -> {} ({})",
-            edge.relation, edge.other_node_name, edge.description.clone().unwrap_or_default()
+            edge.relation,
+            edge.other_node_name,
+            edge.description.clone().unwrap_or_default()
         ));
     }
     for edge in &context.incoming_edges {
         lines.push(format!(
             "incoming: {} -> {} ({})",
-            edge.other_node_name, edge.relation, edge.description.clone().unwrap_or_default()
+            edge.other_node_name,
+            edge.relation,
+            edge.description.clone().unwrap_or_default()
         ));
     }
     if lines.is_empty() {
@@ -164,7 +168,9 @@ fn extract_json_object(raw: &str) -> Result<&str, AiError> {
         .rfind('}')
         .ok_or_else(|| AiError::ResponseParse("missing JSON object end".to_string()))?;
     if end < start {
-        return Err(AiError::ResponseParse("invalid JSON object bounds".to_string()));
+        return Err(AiError::ResponseParse(
+            "invalid JSON object bounds".to_string(),
+        ));
     }
     Ok(&raw[start..=end])
 }

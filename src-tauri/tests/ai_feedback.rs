@@ -1,9 +1,5 @@
-use code_reading_lib::ai::{
-    build_anthropic_request, build_feynman_prompt, parse_feynman_feedback,
-};
-use code_reading_lib::truth::{
-    SourceSnippet, TruthContext, TruthEdge, TruthLayer, TruthNode,
-};
+use code_reading_lib::ai::{build_anthropic_request, build_feynman_prompt, parse_feynman_feedback};
+use code_reading_lib::truth::{SourceSnippet, TruthContext, TruthEdge, TruthLayer, TruthNode};
 
 fn fixture_context() -> TruthContext {
     TruthContext {
@@ -65,10 +61,7 @@ fn prompt_contains_truth_context_and_user_explanation() {
 
 #[test]
 fn anthropic_request_uses_messages_api_shape() {
-    let request = build_anthropic_request(
-        "claude-sonnet-4-6",
-        "请按 JSON 返回",
-    );
+    let request = build_anthropic_request("claude-sonnet-4-6", "请按 JSON 返回");
 
     assert_eq!(request["model"], "claude-sonnet-4-6");
     assert_eq!(request["max_tokens"], 1200);
@@ -97,7 +90,10 @@ fn parses_fenced_feedback_json_from_claude_text() {
 
     assert_eq!(feedback.verdict, "基本到位");
     assert_eq!(feedback.convergence.aligned, 3);
-    assert_eq!(feedback.points[0].node_ref.as_deref(), Some("file:src/App.tsx"));
+    assert_eq!(
+        feedback.points[0].node_ref.as_deref(),
+        Some("file:src/App.tsx")
+    );
     assert_eq!(feedback.follow_up.target_concept, "关键依赖流向");
     assert_eq!(feedback.weak_points, vec!["关键依赖流向"]);
 }
