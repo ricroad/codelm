@@ -23,6 +23,7 @@ import {
   type LearnVariant,
 } from "./designState";
 import { graphSummary, loadGraphData, resolveGraphWarning } from "./graphData";
+import { buildOverviewRouteSteps, type OverviewRouteStep } from "./routeMap";
 import { requestClaudeFeynmanFeedback } from "../feynman/ai";
 import {
   buildLocalFeynmanFeedback,
@@ -486,6 +487,142 @@ function ProgressRail({
         </div>
       </div>
     </aside>
+  );
+}
+
+function routeStatusLabel(status: OverviewRouteStep["status"]): string {
+  if (status === "completed") return "已掌握";
+  if (status === "current") return "当前站";
+  return "待学习";
+}
+
+function routeStatusClasses(status: OverviewRouteStep["status"]): string {
+  if (status === "completed") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "current") return "border-accent/30 bg-accent/10 text-accent";
+  return "border-border-subtle bg-white text-text-secondary";
+}
+
+function OverviewRouteMap({
+  graph,
+  progress,
+  currentTourStep,
+  onStep,
+  onLearnStep,
+}: {
+  graph: KnowledgeGraph;
+  progress: LearningProgress;
+  currentTourStep: number;
+  onStep: (index: number) => void;
+  onLearnStep: (index: number) => void;
+}) {
+  const routeSteps = buildOverviewRouteSteps(graph, progress, currentTourStep);
+  const current = routeSteps[currentTourStep] ?? routeSteps[0];
+  const completedCount = routeSteps.filter((step) => step.status === "completed").length;
+  const currentIndex = Math.max(0, routeSteps.indexOf(current));
+
+  return (
+    <section data-testid="overview-route-map" className="h-full overflow-auto bg-root p-6">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col">
+        <div className="shrink-0 rounded-xl border border-border-subtle bg-white px-5 py-4 shadow-sm">
+          <div className="flex items-center justify-between gap-5">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wide text-accent">主干路线图</div>
+              <h2 className="mt-2 truncate text-2xl font-semibold tracking-tight">
+                {current?.title ?? graph.project.name}
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-secondary">
+                <span className="rounded-full bg-elevated px-3 py-1">
+                  {completedCount}/{routeSteps.length} 已掌握
+                </span>
+                {current?.firstNodeName && (
+                  <span className="rounded-full bg-elevated px-3 py-1">
+                    入口节点 · {current.firstNodeName}
+                  </span>
+                )}
+                {current?.layerNames.slice(0, 2).map((layer) => (
+                  <span key={layer} className="rounded-full bg-elevated px-3 py-1">
+                    {layer}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              data-testid="overview-route-enter"
+              onClick={() => onLearnStep(currentIndex)}
+              disabled={!current}
+              className="h-10 shrink-0 rounded-lg bg-accent px-4 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              进入这一站
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 flex-1 rounded-xl border border-border-subtle bg-white p-5 shadow-sm">
+          <div className="relative">
+            {routeSteps.map((step, index) => {
+              const percent = step.nodeCount === 0 ? 0 : Math.round((step.masteredNodeCount / step.nodeCount) * 100);
+              return (
+                <div key={`${step.order}-${step.title}`} className="relative pb-4 pl-11 last:pb-0">
+                  {index < routeSteps.length - 1 && (
+                    <div className="absolute left-[17px] top-10 h-[calc(100%-16px)] w-px bg-border-subtle" />
+                  )}
+                  <div
+                    className={`absolute left-0 top-3 flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold ${routeStatusClasses(step.status)}`}
+                  >
+                    {String(step.order).padStart(2, "0")}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="overview-route-step"
+                    data-route-index={index}
+                    onClick={() => onStep(index)}
+                    className={`w-full rounded-xl border p-4 text-left transition ${
+                      step.status === "current"
+                        ? "border-accent/40 bg-accent/5 shadow-sm"
+                        : "border-border-subtle bg-elevated hover:border-accent/30 hover:bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-text-primary">{step.title}</h3>
+                          <span className={`rounded-full border px-2.5 py-1 text-[11px] ${routeStatusClasses(step.status)}`}>
+                            {routeStatusLabel(step.status)}
+                          </span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-secondary">
+                          {step.description}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right font-mono text-xs text-text-muted">
+                        <div>{step.masteredNodeCount}/{step.nodeCount}</div>
+                        <div className="mt-1">{percent}%</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                      <div className="h-full bg-accent" style={{ width: `${percent}%` }} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-secondary">
+                      {step.firstNodeName && (
+                        <span className="rounded-full bg-white px-2.5 py-1">
+                          {step.firstNodeName}
+                        </span>
+                      )}
+                      {step.layerNames.slice(0, 3).map((layer) => (
+                        <span key={layer} className="rounded-full bg-white px-2.5 py-1">
+                          {layer}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1097,6 +1234,7 @@ function AppContent() {
   const setTourStep = useDashboardStore((s) => s.setTourStep);
   const navigateToNode = useDashboardStore((s) => s.navigateToNode);
   const currentTourStep = useDashboardStore((s) => s.currentTourStep);
+  const tourHighlightedNodeIds = useDashboardStore((s) => s.tourHighlightedNodeIds);
   const [designState, dispatchDesign] = useReducer(applyDesignAction, defaultDesignState);
   const [progress, setProgress] = useState<LearningProgress>(() => createEmptyProgress());
   const [explanation, setExplanation] = useState("");
@@ -1329,11 +1467,21 @@ function AppContent() {
 
   const handleMode = (mode: AppMode) => {
     dispatchDesign({ type: "setMode", mode });
-    if (mode === "learn") startTour();
+    if (mode === "learn" && tourHighlightedNodeIds.length === 0) startTour();
   };
 
   const handleTourStep = (index: number) => {
     setTourStep(index);
+  };
+
+  const handleStartTour = () => {
+    startTour();
+    dispatchDesign({ type: "setMode", mode: "learn" });
+  };
+
+  const handleLearnRouteStep = (index: number) => {
+    setTourStep(index);
+    dispatchDesign({ type: "setMode", mode: "learn" });
   };
 
   const handleWeaknessBranch = (branch: WeaknessBranch) => {
@@ -1588,7 +1736,7 @@ function AppContent() {
             graph={state.graph}
             currentTourStep={currentTourStep}
             onStep={handleTourStep}
-            onStart={() => handleMode("learn")}
+            onStart={handleStartTour}
           />
         )}
 
@@ -1604,7 +1752,17 @@ function AppContent() {
               <div className="mt-1 text-sm font-semibold">{GENERALIZE_VARIANTS[designState.genVar].prompt}</div>
             </div>
           )}
-          <GraphView />
+          {designState.mode === "overview" ? (
+            <OverviewRouteMap
+              graph={state.graph}
+              progress={progress}
+              currentTourStep={currentTourStep}
+              onStep={handleTourStep}
+              onLearnStep={handleLearnRouteStep}
+            />
+          ) : (
+            <GraphView />
+          )}
           <LearnOverlay
             variant={designState.variant}
             node={targetNode}
