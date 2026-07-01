@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { GraphNode } from "@understand-anything/core/types";
-import { buildLocalFeynmanFeedback } from "./feedback";
+import { buildLocalFeynmanFeedback, composeFollowUpExplanation } from "./feedback";
 
 const node: GraphNode = {
   id: "file:src/features/canvas/Canvas.tsx",
@@ -21,5 +21,17 @@ describe("feedback", () => {
     expect(feedback.points.map((point) => point.kind)).toContain("hit");
     expect(feedback.followUp.question).toContain("依赖");
     expect(feedback.weakPoints.length).toBeGreaterThan(0);
+  });
+
+  test("composes follow-up answers with the original explanation", () => {
+    const composed = composeFollowUpExplanation(
+      "它负责画布交互。",
+      "上游依赖变了会影响哪里？",
+      "会先影响生成任务状态和画布节点回写。",
+    );
+
+    expect(composed).toContain("它负责画布交互。");
+    expect(composed).toContain("追问：上游依赖变了会影响哪里？");
+    expect(composed).toContain("补答：会先影响生成任务状态和画布节点回写。");
   });
 });

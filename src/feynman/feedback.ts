@@ -15,6 +15,20 @@ export interface FeynmanFeedback {
   weakPoints: string[];
 }
 
+export function composeFollowUpExplanation(
+  originalExplanation: string,
+  followUpQuestion: string,
+  followUpAnswer: string,
+): string {
+  return [
+    originalExplanation.trim(),
+    `追问：${followUpQuestion.trim()}`,
+    `补答：${followUpAnswer.trim()}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function includesAny(value: string, words: string[]): boolean {
   const lower = value.toLowerCase();
   return words.some((word) => lower.includes(word.toLowerCase()));

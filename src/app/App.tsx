@@ -24,7 +24,11 @@ import {
 } from "./designState";
 import { graphSummary, loadGraphData, resolveGraphWarning } from "./graphData";
 import { requestClaudeFeynmanFeedback } from "../feynman/ai";
-import { buildLocalFeynmanFeedback, type FeynmanFeedback } from "../feynman/feedback";
+import {
+  buildLocalFeynmanFeedback,
+  composeFollowUpExplanation,
+  type FeynmanFeedback,
+} from "../feynman/feedback";
 import { loadTruthContext, type TruthContext, type TruthEdge } from "../feynman/truth";
 import { requestClaudeGeneralizeFeedback } from "../generalize/ai";
 import {
@@ -489,10 +493,18 @@ function LearningPathBar({
 
 function FeedbackCard({
   feedback,
+  followUpAnswer,
+  followUpLoading,
+  onFollowUpAnswer,
+  onFollowUpSubmit,
   onReset,
   onMastered,
 }: {
   feedback: FeynmanFeedback;
+  followUpAnswer: string;
+  followUpLoading: boolean;
+  onFollowUpAnswer: (value: string) => void;
+  onFollowUpSubmit: () => void;
   onReset: () => void;
   onMastered: () => void;
 }) {
@@ -533,9 +545,23 @@ function FeedbackCard({
         <div className="text-xs font-semibold text-accent">{feedback.followUp.targetConcept}</div>
         <div className="mt-1 text-text-primary">{feedback.followUp.question}</div>
       </div>
+      <textarea
+        value={followUpAnswer}
+        onChange={(event) => onFollowUpAnswer(event.target.value)}
+        className="mt-3 h-24 w-full resize-none rounded-lg border border-border-subtle bg-elevated p-3 text-sm leading-6 outline-none focus:border-accent"
+        placeholder="直接补答这个追问，再跑一轮对齐。"
+      />
       <div className="mt-4 flex gap-2">
         <button type="button" onClick={onReset} className="h-9 flex-1 rounded-lg border border-border-subtle bg-white text-sm">
           再讲一遍
+        </button>
+        <button
+          type="button"
+          onClick={onFollowUpSubmit}
+          disabled={followUpLoading || followUpAnswer.trim().length === 0}
+          className="h-9 flex-1 rounded-lg border border-accent/30 bg-accent/10 text-sm font-semibold text-accent disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {followUpLoading ? "再对齐中" : "补答追问"}
         </button>
         <button type="button" onClick={onMastered} className="h-9 flex-1 rounded-lg bg-accent text-sm font-semibold text-white">
           标记学会
@@ -643,10 +669,13 @@ function FeynmanPanel({
   feedbackError,
   submitted,
   explanation,
+  followUpAnswer,
   feedback,
   onVariant,
   onExplanation,
+  onFollowUpAnswer,
   onSubmit,
+  onFollowUpSubmit,
   onReset,
   onMastered,
 }: {
@@ -659,10 +688,13 @@ function FeynmanPanel({
   feedbackError: string | null;
   submitted: boolean;
   explanation: string;
+  followUpAnswer: string;
   feedback: FeynmanFeedback | null;
   onVariant: (variant: LearnVariant) => void;
   onExplanation: (value: string) => void;
+  onFollowUpAnswer: (value: string) => void;
   onSubmit: () => void;
+  onFollowUpSubmit: () => void;
   onReset: () => void;
   onMastered: () => void;
 }) {
@@ -713,7 +745,15 @@ function FeynmanPanel({
               </div>
             )}
             {submitted && feedback && (
-              <FeedbackCard feedback={feedback} onReset={onReset} onMastered={onMastered} />
+              <FeedbackCard
+                feedback={feedback}
+                followUpAnswer={followUpAnswer}
+                followUpLoading={feedbackLoading}
+                onFollowUpAnswer={onFollowUpAnswer}
+                onFollowUpSubmit={onFollowUpSubmit}
+                onReset={onReset}
+                onMastered={onMastered}
+              />
             )}
           </>
         ) : (
@@ -735,10 +775,13 @@ function LearnOverlay({
   feedbackLoading,
   feedbackError,
   explanation,
+  followUpAnswer,
   feedback,
   submitted,
   onExplanation,
+  onFollowUpAnswer,
   onSubmit,
+  onFollowUpSubmit,
   onReset,
   onMastered,
 }: {
@@ -750,10 +793,13 @@ function LearnOverlay({
   feedbackLoading: boolean;
   feedbackError: string | null;
   explanation: string;
+  followUpAnswer: string;
   feedback: FeynmanFeedback | null;
   submitted: boolean;
   onExplanation: (value: string) => void;
+  onFollowUpAnswer: (value: string) => void;
   onSubmit: () => void;
+  onFollowUpSubmit: () => void;
   onReset: () => void;
   onMastered: () => void;
 }) {
@@ -823,7 +869,15 @@ function LearnOverlay({
             </div>
           )}
           {submitted && feedback && (
-            <FeedbackCard feedback={feedback} onReset={onReset} onMastered={onMastered} />
+            <FeedbackCard
+              feedback={feedback}
+              followUpAnswer={followUpAnswer}
+              followUpLoading={feedbackLoading}
+              onFollowUpAnswer={onFollowUpAnswer}
+              onFollowUpSubmit={onFollowUpSubmit}
+              onReset={onReset}
+              onMastered={onMastered}
+            />
           )}
         </section>
       </div>
@@ -1010,6 +1064,7 @@ function AppContent() {
   const [designState, dispatchDesign] = useReducer(applyDesignAction, defaultDesignState);
   const [progress, setProgress] = useState<LearningProgress>(() => createEmptyProgress());
   const [explanation, setExplanation] = useState("");
+  const [followUpAnswer, setFollowUpAnswer] = useState("");
   const [generalizeResponse, setGeneralizeResponse] = useState("");
   const [feedback, setFeedback] = useState<FeynmanFeedback | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -1059,6 +1114,7 @@ function AppContent() {
 
   const resetGraphInteractionState = useCallback(() => {
     setExplanation("");
+    setFollowUpAnswer("");
     setGeneralizeResponse("");
     setFeedback(null);
     setFeedbackError(null);
@@ -1244,19 +1300,20 @@ function AppContent() {
     setTourStep(index);
   };
 
-  const handleLearnSubmit = async () => {
+  const submitLearningExplanation = async (nextExplanation: string) => {
     if (!targetNode) return;
     setFeedbackLoading(true);
     setFeedbackError(null);
     let nextFeedback: FeynmanFeedback;
     try {
-      nextFeedback = await requestClaudeFeynmanFeedback(targetNode.id, explanation);
+      nextFeedback = await requestClaudeFeynmanFeedback(targetNode.id, nextExplanation);
     } catch (error: unknown) {
-      nextFeedback = buildLocalFeynmanFeedback(targetNode, explanation);
+      nextFeedback = buildLocalFeynmanFeedback(targetNode, nextExplanation);
       const message = error instanceof Error ? error.message : String(error);
       setFeedbackError(`真 Claude 暂不可用，已先用本地草评：${message}`);
     }
     setFeedback(nextFeedback);
+    setFollowUpAnswer("");
     setProgress((current) =>
       recordAttempt(
         current,
@@ -1267,6 +1324,26 @@ function AppContent() {
     );
     dispatchDesign({ type: "setSubmitted", submitted: true });
     setFeedbackLoading(false);
+  };
+
+  const handleLearnSubmit = async () => {
+    await submitLearningExplanation(explanation);
+  };
+
+  const handleFollowUpSubmit = async () => {
+    if (!feedback) return;
+    const nextExplanation = composeFollowUpExplanation(
+      explanation,
+      feedback.followUp.question,
+      followUpAnswer,
+    );
+    setExplanation(nextExplanation);
+    await submitLearningExplanation(nextExplanation);
+  };
+
+  const handleLearnReset = () => {
+    setFollowUpAnswer("");
+    dispatchDesign({ type: "resetLearn" });
   };
 
   const handleMastered = () => {
@@ -1494,11 +1571,14 @@ function AppContent() {
             feedbackLoading={feedbackLoading}
             feedbackError={feedbackError}
             explanation={explanation}
+            followUpAnswer={followUpAnswer}
             feedback={feedback}
             submitted={designState.submitted}
             onExplanation={setExplanation}
+            onFollowUpAnswer={setFollowUpAnswer}
             onSubmit={handleLearnSubmit}
-            onReset={() => dispatchDesign({ type: "resetLearn" })}
+            onFollowUpSubmit={handleFollowUpSubmit}
+            onReset={handleLearnReset}
             onMastered={handleMastered}
           />
         </div>
@@ -1523,11 +1603,17 @@ function AppContent() {
             feedbackError={feedbackError}
             submitted={designState.submitted}
             explanation={explanation}
+            followUpAnswer={followUpAnswer}
             feedback={feedback}
-            onVariant={(variant) => dispatchDesign({ type: "setVariant", variant })}
+            onVariant={(variant) => {
+              setFollowUpAnswer("");
+              dispatchDesign({ type: "setVariant", variant });
+            }}
             onExplanation={setExplanation}
+            onFollowUpAnswer={setFollowUpAnswer}
             onSubmit={handleLearnSubmit}
-            onReset={() => dispatchDesign({ type: "resetLearn" })}
+            onFollowUpSubmit={handleFollowUpSubmit}
+            onReset={handleLearnReset}
             onMastered={handleMastered}
           />
         )}
