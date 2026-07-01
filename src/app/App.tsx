@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type { GraphIssue } from "@understand-anything/core/schema";
 import type { GraphNode, KnowledgeGraph, TourStep } from "@understand-anything/core/types";
 import GraphView from "../vendor/ua/components/GraphView";
@@ -43,8 +43,12 @@ import {
   apiKeyStatusLabel,
   clearApiKey,
   loadApiKeyStatus,
+  loadProjectPaths,
+  projectPathsLabel,
   saveApiKey,
+  saveProjectPaths,
   type ApiKeyStatus,
+  type ProjectPaths,
 } from "./settings";
 
 type LoadState =
@@ -131,30 +135,49 @@ function ModeTabs({
 
 function SettingsPanel({
   status,
+  projectPaths,
   draftKey,
+  repoRootDraft,
+  graphPathDraft,
   saving,
+  projectPathsSaving,
   error,
+  projectPathsError,
   onDraftKey,
+  onRepoRootDraft,
+  onGraphPathDraft,
   onSave,
   onClear,
+  onSaveProjectPaths,
   onClose,
 }: {
   status: ApiKeyStatus;
+  projectPaths: ProjectPaths;
   draftKey: string;
+  repoRootDraft: string;
+  graphPathDraft: string;
   saving: boolean;
+  projectPathsSaving: boolean;
   error: string | null;
+  projectPathsError: string | null;
   onDraftKey: (value: string) => void;
+  onRepoRootDraft: (value: string) => void;
+  onGraphPathDraft: (value: string) => void;
   onSave: () => void;
   onClear: () => void;
+  onSaveProjectPaths: () => void;
   onClose: () => void;
 }) {
   const desktopRequired = status.source === "desktop-required";
+  const projectPathsDesktopRequired = projectPaths.source === "desktop-required";
   return (
-    <div className="absolute right-5 top-[62px] z-50 w-[360px] rounded-xl border border-border-subtle bg-white p-4 shadow-2xl">
+    <div className="absolute right-5 top-[62px] z-50 max-h-[calc(100vh-88px)] w-[min(520px,calc(100vw-40px))] overflow-auto rounded-xl border border-border-subtle bg-white p-4 shadow-2xl">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold">Claude API</div>
-          <div className="mt-1 text-xs text-text-muted">{apiKeyStatusLabel(status)}</div>
+          <div className="text-sm font-semibold">设置</div>
+          <div className="mt-1 text-xs text-text-muted">
+            API {apiKeyStatusLabel(status)} · 路径 {projectPathsLabel(projectPaths)}
+          </div>
         </div>
         <button
           type="button"
@@ -164,37 +187,89 @@ function SettingsPanel({
           关闭
         </button>
       </div>
-      <input
-        value={draftKey}
-        onChange={(event) => onDraftKey(event.target.value)}
-        disabled={desktopRequired}
-        className="mt-4 h-10 w-full rounded-lg border border-border-subtle bg-elevated px-3 font-mono text-xs outline-none focus:border-accent disabled:opacity-50"
-        placeholder={desktopRequired ? "桌面 App 中可保存 key" : "sk-ant-api03-..."}
-        type="password"
-      />
+
+      <section className="mt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-accent">
+            Claude API
+          </div>
+          <div className="text-xs text-text-muted">{apiKeyStatusLabel(status)}</div>
+        </div>
+        <input
+          value={draftKey}
+          onChange={(event) => onDraftKey(event.target.value)}
+          disabled={desktopRequired}
+          className="mt-3 h-10 w-full rounded-lg border border-border-subtle bg-elevated px-3 font-mono text-xs outline-none focus:border-accent disabled:opacity-50"
+          placeholder={desktopRequired ? "桌面 App 中可保存 key" : "sk-ant-api03-..."}
+          type="password"
+        />
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={desktopRequired || saving || draftKey.trim().length === 0}
+            className="h-9 flex-1 rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {saving ? "保存中" : "保存 key"}
+          </button>
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={desktopRequired || saving || status.source === "env"}
+            className="h-9 flex-1 rounded-lg border border-border-subtle bg-white text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            清除本地 key
+          </button>
+        </div>
+      </section>
+
+      <section className="mt-5 border-t border-border-subtle pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-accent">
+            项目路径
+          </div>
+          <div className="text-xs text-text-muted">{projectPathsLabel(projectPaths)}</div>
+        </div>
+        <label className="mt-3 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          Repo root
+        </label>
+        <input
+          value={repoRootDraft}
+          onChange={(event) => onRepoRootDraft(event.target.value)}
+          disabled={projectPathsDesktopRequired}
+          className="mt-2 h-10 w-full rounded-lg border border-border-subtle bg-elevated px-3 font-mono text-xs outline-none focus:border-accent disabled:opacity-50"
+          placeholder="~/Desktop/yanzu/画布项目/frontend-repo"
+        />
+        <label className="mt-3 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          Graph JSON
+        </label>
+        <input
+          value={graphPathDraft}
+          onChange={(event) => onGraphPathDraft(event.target.value)}
+          disabled={projectPathsDesktopRequired}
+          className="mt-2 h-10 w-full rounded-lg border border-border-subtle bg-elevated px-3 font-mono text-xs outline-none focus:border-accent disabled:opacity-50"
+          placeholder="留空则使用 repo/.understand-anything/knowledge-graph.json"
+        />
+        <button
+          type="button"
+          onClick={onSaveProjectPaths}
+          disabled={projectPathsDesktopRequired || projectPathsSaving}
+          className="mt-4 h-9 w-full rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {projectPathsSaving ? "保存并加载中" : "保存路径并重载"}
+        </button>
+      </section>
+
       {error && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
           {error}
         </div>
       )}
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={desktopRequired || saving || draftKey.trim().length === 0}
-          className="h-9 flex-1 rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {saving ? "保存中" : "保存 key"}
-        </button>
-        <button
-          type="button"
-          onClick={onClear}
-          disabled={desktopRequired || saving || status.source === "env"}
-          className="h-9 flex-1 rounded-lg border border-border-subtle bg-white text-sm disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          清除本地 key
-        </button>
-      </div>
+      {projectPathsError && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          {projectPathsError}
+        </div>
+      )}
     </div>
   );
 }
@@ -884,6 +959,16 @@ function AppContent() {
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [apiKeySaving, setApiKeySaving] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [projectPaths, setProjectPaths] = useState<ProjectPaths>({
+    repoRoot: "",
+    graphPath: "",
+    configured: false,
+    source: "desktop-required",
+  });
+  const [repoRootDraft, setRepoRootDraft] = useState("");
+  const [graphPathDraft, setGraphPathDraft] = useState("");
+  const [projectPathsSaving, setProjectPathsSaving] = useState(false);
+  const [projectPathsError, setProjectPathsError] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>({
     status: "loading",
     error: null,
@@ -892,11 +977,33 @@ function AppContent() {
     repoGitCommitHash: null,
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    loadGraphData()
-      .then((data) => {
-        if (cancelled) return;
+  const resetGraphInteractionState = useCallback(() => {
+    setExplanation("");
+    setGeneralizeResponse("");
+    setFeedback(null);
+    setFeedbackError(null);
+    setGeneralizeFeedback(null);
+    setGeneralizeError(null);
+    setTruthContext(null);
+    setTruthError(null);
+    setTruthLoading(false);
+    dispatchDesign({ type: "resetLearn" });
+    dispatchDesign({ type: "resetGeneralize" });
+  }, []);
+
+  const loadGraphIntoState = useCallback(
+    async (shouldSkip?: () => boolean) => {
+      setState({
+        status: "loading",
+        error: null,
+        graph: null,
+        issues: [],
+        repoGitCommitHash: null,
+      });
+      resetGraphInteractionState();
+      try {
+        const data = await loadGraphData();
+        if (shouldSkip?.()) return;
         setGraph(data.graph);
         setState({
           status: "ready",
@@ -905,9 +1012,8 @@ function AppContent() {
           issues: data.issues,
           repoGitCommitHash: data.repoGitCommitHash,
         });
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
+      } catch (error: unknown) {
+        if (shouldSkip?.()) return;
         setState({
           status: "error",
           error: error instanceof Error ? error.message : String(error),
@@ -915,11 +1021,18 @@ function AppContent() {
           issues: [],
           repoGitCommitHash: null,
         });
-      });
+      }
+    },
+    [resetGraphInteractionState, setGraph],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadGraphIntoState(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, [setGraph]);
+  }, [loadGraphIntoState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -932,6 +1045,25 @@ function AppContent() {
       .catch((error: unknown) => {
         if (cancelled) return;
         setApiKeyError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadProjectPaths()
+      .then((paths) => {
+        if (cancelled) return;
+        setProjectPaths(paths);
+        setRepoRootDraft(paths.repoRoot);
+        setGraphPathDraft(paths.graphPath);
+        setProjectPathsError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setProjectPathsError(error instanceof Error ? error.message : String(error));
       });
     return () => {
       cancelled = true;
@@ -1090,6 +1222,43 @@ function AppContent() {
     }
   };
 
+  const handleSaveProjectPaths = async () => {
+    setProjectPathsSaving(true);
+    setProjectPathsError(null);
+    try {
+      const paths = await saveProjectPaths(repoRootDraft, graphPathDraft);
+      setProjectPaths(paths);
+      setRepoRootDraft(paths.repoRoot);
+      setGraphPathDraft(paths.graphPath);
+      await loadGraphIntoState();
+    } catch (error: unknown) {
+      setProjectPathsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProjectPathsSaving(false);
+    }
+  };
+
+  const settingsPanel = settingsOpen ? (
+    <SettingsPanel
+      status={apiStatus}
+      projectPaths={projectPaths}
+      draftKey={apiKeyDraft}
+      repoRootDraft={repoRootDraft}
+      graphPathDraft={graphPathDraft}
+      saving={apiKeySaving}
+      projectPathsSaving={projectPathsSaving}
+      error={apiKeyError}
+      projectPathsError={projectPathsError}
+      onDraftKey={setApiKeyDraft}
+      onRepoRootDraft={setRepoRootDraft}
+      onGraphPathDraft={setGraphPathDraft}
+      onSave={handleSaveApiKey}
+      onClear={handleClearApiKey}
+      onSaveProjectPaths={handleSaveProjectPaths}
+      onClose={() => setSettingsOpen(false)}
+    />
+  ) : null;
+
   if (state.status === "loading") {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-root text-text-primary">
@@ -1103,7 +1272,15 @@ function AppContent() {
 
   if (state.status === "error") {
     return (
-      <main className="flex h-screen w-screen items-center justify-center bg-root p-6 text-text-primary">
+      <main className="relative flex h-screen w-screen items-center justify-center bg-root p-6 text-text-primary">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((value) => !value)}
+          className="absolute right-5 top-5 h-9 rounded-lg border border-border-subtle bg-white px-3 text-xs font-semibold text-text-secondary shadow-sm"
+        >
+          设置路径
+        </button>
+        {settingsPanel}
         <div className="max-w-xl rounded-lg border border-border-subtle bg-surface px-5 py-4 shadow-sm">
           <div className="text-sm font-semibold text-red-700">图谱加载失败</div>
           <div className="mt-2 font-mono text-xs leading-relaxed text-text-secondary">{state.error}</div>
@@ -1140,18 +1317,7 @@ function AppContent() {
         >
           API
         </button>
-        {settingsOpen && (
-          <SettingsPanel
-            status={apiStatus}
-            draftKey={apiKeyDraft}
-            saving={apiKeySaving}
-            error={apiKeyError}
-            onDraftKey={setApiKeyDraft}
-            onSave={handleSaveApiKey}
-            onClear={handleClearApiKey}
-            onClose={() => setSettingsOpen(false)}
-          />
-        )}
+        {settingsPanel}
       </header>
 
       <WarningBanner issues={state.issues} />

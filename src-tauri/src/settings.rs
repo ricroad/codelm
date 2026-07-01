@@ -19,6 +19,8 @@ pub enum SettingsError {
 #[serde(rename_all = "camelCase")]
 struct LocalSettings {
     anthropic_api_key: Option<String>,
+    repo_root: Option<String>,
+    graph_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +29,15 @@ pub struct ApiKeyStatus {
     pub configured: bool,
     pub source: String,
     pub masked_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPaths {
+    pub repo_root: String,
+    pub graph_path: String,
+    pub configured: bool,
+    pub source: String,
 }
 
 pub fn settings_path() -> Result<PathBuf, SettingsError> {
@@ -74,6 +85,70 @@ pub fn load_api_key_at_path(path: &Path) -> Result<Option<String>, SettingsError
         .filter(|key| !key.is_empty()))
 }
 
+fn repo_default_graph_path(repo_root: &Path) -> PathBuf {
+    repo_root
+        .join(".understand-anything")
+        .join("knowledge-graph.json")
+}
+
+pub fn load_project_paths_at_path(
+    path: &Path,
+    default_repo_root: &Path,
+    default_graph_path: &Path,
+) -> Result<ProjectPaths, SettingsError> {
+    let settings = read_settings(path)?;
+    let repo_root = settings
+        .repo_root
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| default_repo_root.display().to_string());
+    let graph_path = settings
+        .graph_path
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            if repo_root == default_repo_root.display().to_string() {
+                default_graph_path.display().to_string()
+            } else {
+                repo_default_graph_path(Path::new(&repo_root))
+                    .display()
+                    .to_string()
+            }
+        });
+    let configured = repo_root != default_repo_root.display().to_string()
+        || graph_path != default_graph_path.display().to_string();
+    Ok(ProjectPaths {
+        repo_root,
+        graph_path,
+        configured,
+        source: if configured { "settings" } else { "default" }.to_string(),
+    })
+}
+
+pub fn save_project_paths_at_path(
+    path: &Path,
+    repo_root: &str,
+    graph_path: &str,
+    default_repo_root: &Path,
+    default_graph_path: &Path,
+) -> Result<ProjectPaths, SettingsError> {
+    let mut settings = read_settings(path)?;
+    let repo_root = repo_root.trim();
+    settings.repo_root = if repo_root.is_empty() {
+        None
+    } else {
+        Some(repo_root.to_string())
+    };
+    let graph_path = graph_path.trim();
+    settings.graph_path = if graph_path.is_empty() {
+        None
+    } else {
+        Some(graph_path.to_string())
+    };
+    write_settings(path, &settings)?;
+    load_project_paths_at_path(path, default_repo_root, default_graph_path)
+}
+
 pub fn settings_status_at_path(path: &Path) -> Result<ApiKeyStatus, SettingsError> {
     match load_api_key_at_path(path)? {
         Some(key) => Ok(ApiKeyStatus {
@@ -91,19 +166,20 @@ pub fn settings_status_at_path(path: &Path) -> Result<ApiKeyStatus, SettingsErro
 
 pub fn save_api_key_at_path(path: &Path, api_key: &str) -> Result<ApiKeyStatus, SettingsError> {
     let trimmed = api_key.trim();
-    let settings = LocalSettings {
-        anthropic_api_key: if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        },
+    let mut settings = read_settings(path)?;
+    settings.anthropic_api_key = if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
     };
     write_settings(path, &settings)?;
     settings_status_at_path(path)
 }
 
 pub fn clear_api_key_at_path(path: &Path) -> Result<ApiKeyStatus, SettingsError> {
-    write_settings(path, &LocalSettings::default())?;
+    let mut settings = read_settings(path)?;
+    settings.anthropic_api_key = None;
+    write_settings(path, &settings)?;
     settings_status_at_path(path)
 }
 
@@ -132,4 +208,26 @@ pub fn save_api_key(api_key: &str) -> Result<ApiKeyStatus, SettingsError> {
 
 pub fn clear_api_key() -> Result<ApiKeyStatus, SettingsError> {
     clear_api_key_at_path(&settings_path()?)
+}
+
+pub fn project_paths(
+    default_repo_root: &Path,
+    default_graph_path: &Path,
+) -> Result<ProjectPaths, SettingsError> {
+    load_project_paths_at_path(&settings_path()?, default_repo_root, default_graph_path)
+}
+
+pub fn save_project_paths(
+    repo_root: &str,
+    graph_path: &str,
+    default_repo_root: &Path,
+    default_graph_path: &Path,
+) -> Result<ProjectPaths, SettingsError> {
+    save_project_paths_at_path(
+        &settings_path()?,
+        repo_root,
+        graph_path,
+        default_repo_root,
+        default_graph_path,
+    )
 }

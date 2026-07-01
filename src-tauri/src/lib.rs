@@ -19,6 +19,8 @@ pub fn run() {
             commands::api_key_status,
             commands::save_api_key,
             commands::clear_api_key,
+            commands::project_paths,
+            commands::save_project_paths,
             commands::save_progress,
         ])
         .run(tauri::generate_context!())
