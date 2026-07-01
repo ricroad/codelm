@@ -42,7 +42,9 @@ import {
   progressSummary,
   recordAttempt,
   recordMastery,
+  suggestWeaknessBranches,
   type LearningProgress,
+  type WeaknessBranch,
 } from "../progress/progress";
 import { loadStoredProgress, saveStoredProgress } from "../progress/persistence";
 import {
@@ -399,13 +401,16 @@ function ProgressRail({
   progress,
   commitWarning,
   storageWarning,
+  onWeaknessBranch,
 }: {
   graph: KnowledgeGraph;
   progress: LearningProgress;
   commitWarning: string | null;
   storageWarning: string | null;
+  onWeaknessBranch: (branch: WeaknessBranch) => void;
 }) {
   const summary = progressSummary(graph, progress);
+  const branches = suggestWeaknessBranches(graph, progress);
   return (
     <aside className="flex min-h-0 flex-col border-l border-border-subtle bg-surface">
       <div className="border-b border-border-subtle p-5">
@@ -435,6 +440,36 @@ function ProgressRail({
             ),
           )}
         </div>
+        {branches.length > 0 && (
+          <>
+            <div className="mt-5 text-xs font-semibold uppercase tracking-wide text-accent">
+              薄弱支线
+            </div>
+            <div className="mt-3 space-y-2">
+              {branches.map((branch) => {
+                const firstNode = graph.nodes.find((node) => node.id === branch.nodeIds[0]);
+                return (
+                  <button
+                    key={branch.weakPoint}
+                    type="button"
+                    onClick={() => onWeaknessBranch(branch)}
+                    className="w-full rounded-lg border border-border-subtle bg-white p-3 text-left transition hover:border-accent/40 hover:bg-accent/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-text-primary">{branch.title}</span>
+                      <span className="font-mono text-[11px] text-accent">
+                        {branch.nodeIds.length} nodes
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-text-secondary">
+                      {firstNode?.name ?? branch.description}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
         {commitWarning && (
           <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
             {commitWarning}
@@ -1060,6 +1095,7 @@ function AppContent() {
   const closeCodeViewer = useDashboardStore((s) => s.closeCodeViewer);
   const startTour = useDashboardStore((s) => s.startTour);
   const setTourStep = useDashboardStore((s) => s.setTourStep);
+  const navigateToNode = useDashboardStore((s) => s.navigateToNode);
   const currentTourStep = useDashboardStore((s) => s.currentTourStep);
   const [designState, dispatchDesign] = useReducer(applyDesignAction, defaultDesignState);
   const [progress, setProgress] = useState<LearningProgress>(() => createEmptyProgress());
@@ -1298,6 +1334,13 @@ function AppContent() {
 
   const handleTourStep = (index: number) => {
     setTourStep(index);
+  };
+
+  const handleWeaknessBranch = (branch: WeaknessBranch) => {
+    const firstNodeId = branch.nodeIds[0];
+    if (!firstNodeId) return;
+    dispatchDesign({ type: "setMode", mode: "learn" });
+    navigateToNode(firstNodeId);
   };
 
   const submitLearningExplanation = async (nextExplanation: string) => {
@@ -1589,6 +1632,7 @@ function AppContent() {
             progress={progress}
             commitWarning={commitWarning}
             storageWarning={progressStorageWarning}
+            onWeaknessBranch={handleWeaknessBranch}
           />
         )}
 

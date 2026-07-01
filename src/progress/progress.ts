@@ -23,6 +23,13 @@ export interface ProgressSummary {
   streakDays: number;
 }
 
+export interface WeaknessBranch {
+  weakPoint: string;
+  title: string;
+  description: string;
+  nodeIds: string[];
+}
+
 export function createEmptyProgress(): LearningProgress {
   return { nodes: {}, streakDays: 1 };
 }
@@ -104,4 +111,76 @@ export function progressSummary(
     weakPoints,
     streakDays: progress.streakDays,
   };
+}
+
+function normalizedParts(value: string): string[] {
+  const lower = value.toLowerCase();
+  return [
+    lower,
+    ...lower
+      .split(/[\s,，、/|·:：;；()[\]{}"'`]+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 2),
+  ];
+}
+
+function textMatchesWeakPoint(text: string, weakPoint: string): boolean {
+  const textLower = text.toLowerCase();
+  return normalizedParts(weakPoint).some((part) => textLower.includes(part));
+}
+
+export function suggestWeaknessBranches(
+  graph: KnowledgeGraph,
+  progress: LearningProgress,
+): WeaknessBranch[] {
+  const summary = progressSummary(graph, progress);
+  const graphNodeIds = new Set(graph.nodes.map((node) => node.id));
+  const mastered = new Set(
+    Object.entries(progress.nodes)
+      .filter(([nodeId, value]) => graphNodeIds.has(nodeId) && value.status === "mastered")
+      .map(([nodeId]) => nodeId),
+  );
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+
+  return summary.weakPoints
+    .map((weakPoint) => {
+      const textMatchedNodeIds = graph.nodes
+        .filter((node) => !mastered.has(node.id))
+        .filter((node) => {
+          const layerText = graph.layers
+            .filter((layer) => layer.nodeIds.includes(node.id))
+            .map((layer) => `${layer.name} ${layer.description}`)
+            .join(" ");
+          const nodeText = `${node.name} ${node.summary} ${node.tags.join(" ")} ${layerText}`;
+          return textMatchesWeakPoint(nodeText, weakPoint);
+        })
+        .map((node) => node.id);
+      const weakSourceNodeIds = Object.entries(progress.nodes)
+        .filter(([nodeId, nodeProgress]) => {
+          return (
+            graphNodeIds.has(nodeId) &&
+            nodeProgress.status !== "mastered" &&
+            nodeProgress.weakConcepts.includes(weakPoint)
+          );
+        })
+        .map(([nodeId]) => nodeId);
+      const dependencyNodeIds = graph.edges
+        .filter((edge) => weakSourceNodeIds.includes(edge.source) || weakSourceNodeIds.includes(edge.target))
+        .flatMap((edge) => {
+          if (weakSourceNodeIds.includes(edge.source)) return [edge.target];
+          return [edge.source];
+        })
+        .filter((nodeId) => nodeById.has(nodeId) && !mastered.has(nodeId));
+      const matchedNodeIds = [...new Set([...textMatchedNodeIds, ...dependencyNodeIds])].slice(0, 4);
+
+      if (matchedNodeIds.length === 0) return null;
+      return {
+        weakPoint,
+        title: `${weakPoint}支线`,
+        description: `围绕「${weakPoint}」补走 ${matchedNodeIds.length} 个相关节点。`,
+        nodeIds: matchedNodeIds,
+      } satisfies WeaknessBranch;
+    })
+    .filter((branch): branch is WeaknessBranch => branch != null)
+    .slice(0, 3);
 }
