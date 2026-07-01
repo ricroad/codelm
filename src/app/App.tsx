@@ -40,6 +40,10 @@ import {
   type GeneralizeFeedback,
 } from "../generalize/feedback";
 import {
+  buildGeneralizeCoverageSteps,
+  type GeneralizeCoverageStep,
+} from "../generalize/coverage";
+import {
   createEmptyProgress,
   progressSummary,
   recordAttempt,
@@ -620,6 +624,136 @@ function OverviewRouteMap({
                 </div>
               );
             })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function generalizeCoverageStatusLabel(status: GeneralizeCoverageStep["status"]): string {
+  if (status === "covered") return "已覆盖";
+  if (status === "missing") return "缺失";
+  return "待回答";
+}
+
+function generalizeCoverageStatusClasses(status: GeneralizeCoverageStep["status"]): string {
+  if (status === "covered") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "missing") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-border-subtle bg-white text-text-secondary";
+}
+
+function generalizeCoverageStepClasses(status: GeneralizeCoverageStep["status"]): string {
+  if (status === "covered") return "border-emerald-200 bg-emerald-50/70";
+  if (status === "missing") return "border-rose-300 bg-rose-50 shadow-sm";
+  return "border-border-subtle bg-elevated";
+}
+
+function GeneralizeCoverageMap({
+  graph,
+  genVar,
+  feedback,
+}: {
+  graph: KnowledgeGraph;
+  genVar: GeneralizeVariant;
+  feedback: GeneralizeFeedback | null;
+}) {
+  const selected = GENERALIZE_VARIANTS[genVar];
+  const coverageSteps = buildGeneralizeCoverageSteps(genVar, graph, feedback);
+  const coveredCount = coverageSteps.filter((step) => step.status === "covered").length;
+  const missingCount = coverageSteps.filter((step) => step.status === "missing").length;
+  const percent = Math.round((coveredCount / Math.max(coverageSteps.length, 1)) * 100);
+
+  return (
+    <section data-testid="generalize-coverage-map" className="h-full overflow-auto bg-root p-6">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col">
+        <div className="shrink-0 rounded-xl border border-border-subtle bg-white px-5 py-4 shadow-sm">
+          <div className="flex items-start justify-between gap-5">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wide text-accent">
+                泛化路线 · {selected.label}
+              </div>
+              <h2 className="mt-2 truncate text-2xl font-semibold tracking-tight">
+                {selected.title}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">
+                {selected.prompt}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="font-mono text-3xl text-accent">{percent}%</div>
+              <div className="mt-1 text-[11px] text-text-muted">
+                {coveredCount}/{coverageSteps.length} 覆盖
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-elevated">
+            <div className="h-full bg-accent transition-all" style={{ width: `${percent}%` }} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-text-secondary">
+            <span className="rounded-full bg-elevated px-3 py-1">
+              {missingCount} 个缺口
+            </span>
+            <span className="rounded-full bg-elevated px-3 py-1">
+              {graph.project.name}
+            </span>
+            <span className="rounded-full bg-elevated px-3 py-1">
+              {graph.tour.length} 路径步
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 flex-1 rounded-xl border border-border-subtle bg-white p-5 shadow-sm">
+          <div className="relative">
+            {coverageSteps.map((step, index) => (
+              <div key={step.id} className="relative pb-4 pl-11 last:pb-0">
+                {index < coverageSteps.length - 1 && (
+                  <div className="absolute left-[17px] top-10 h-[calc(100%-16px)] w-px bg-border-subtle" />
+                )}
+                <div
+                  className={`absolute left-0 top-3 flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold ${generalizeCoverageStatusClasses(step.status)}`}
+                >
+                  {String(index + 1).padStart(2, "0")}
+                </div>
+                <div
+                  data-testid="generalize-coverage-step"
+                  data-status={step.status}
+                  className={`rounded-xl border p-4 transition ${generalizeCoverageStepClasses(step.status)}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-semibold text-text-primary">{step.label}</h3>
+                        <span className={`rounded-full border px-2.5 py-1 text-[11px] ${generalizeCoverageStatusClasses(step.status)}`}>
+                          {generalizeCoverageStatusLabel(step.status)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                        {step.description}
+                      </p>
+                    </div>
+                    {step.status === "missing" && (
+                      <div className="shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-rose-700">
+                        需要补
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-text-secondary">
+                    {step.routeNodeNames.length > 0 ? (
+                      step.routeNodeNames.map((nodeName) => (
+                        <span key={nodeName} className="rounded-full bg-white px-2.5 py-1">
+                          {nodeName}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="rounded-full bg-white px-2.5 py-1">
+                        图谱节点待匹配
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1789,14 +1923,6 @@ function AppContent() {
           {designState.mode === "learn" && (
             <LearningPathBar graph={state.graph} currentTourStep={currentTourStep} onStep={handleTourStep} />
           )}
-          {designState.mode === "generalize" && (
-            <div className="absolute left-5 top-5 z-10 rounded-xl border border-border-subtle bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
-              <div className="text-xs font-semibold uppercase tracking-wide text-accent">
-                {GENERALIZE_VARIANTS[designState.genVar].label}
-              </div>
-              <div className="mt-1 text-sm font-semibold">{GENERALIZE_VARIANTS[designState.genVar].prompt}</div>
-            </div>
-          )}
           {designState.mode === "overview" ? (
             <OverviewRouteMap
               graph={state.graph}
@@ -1804,6 +1930,12 @@ function AppContent() {
               currentTourStep={currentTourStep}
               onStep={handleTourStep}
               onLearnStep={handleLearnRouteStep}
+            />
+          ) : designState.mode === "generalize" ? (
+            <GeneralizeCoverageMap
+              graph={state.graph}
+              genVar={designState.genVar}
+              feedback={generalizeFeedback}
             />
           ) : (
             <GraphView />
