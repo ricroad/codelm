@@ -28,7 +28,9 @@ import { buildLocalFeynmanFeedback, type FeynmanFeedback } from "../feynman/feed
 import { loadTruthContext, type TruthContext, type TruthEdge } from "../feynman/truth";
 import { requestClaudeGeneralizeFeedback } from "../generalize/ai";
 import {
+  appendGeneralizeConversation,
   buildLocalGeneralizeFeedback,
+  type GeneralizeConversationTurn,
   type GeneralizeFeedback,
 } from "../generalize/feedback";
 import {
@@ -790,6 +792,7 @@ function GeneralizePanel({
   genVar,
   submitted,
   response,
+  conversation,
   feedback,
   feedbackLoading,
   feedbackError,
@@ -801,6 +804,7 @@ function GeneralizePanel({
   genVar: GeneralizeVariant;
   submitted: boolean;
   response: string;
+  conversation: GeneralizeConversationTurn[];
   feedback: GeneralizeFeedback | null;
   feedbackLoading: boolean;
   feedbackError: string | null;
@@ -810,6 +814,8 @@ function GeneralizePanel({
   onReset: () => void;
 }) {
   const selected = GENERALIZE_VARIANTS[genVar];
+  const hasTeachHistory = genVar === "Z" && conversation.length > 0;
+  const needsTeachFollowUp = hasTeachHistory && !feedback?.understood;
   const percent = feedback
     ? Math.round((feedback.coverage.covered / Math.max(feedback.coverage.total, 1)) * 100)
     : 0;
@@ -830,6 +836,28 @@ function GeneralizePanel({
         <div className="rounded-xl border border-accent/20 bg-accent/5 p-4 text-sm leading-6">
           {selected.prompt}
         </div>
+        {hasTeachHistory && (
+          <div className="mt-4 space-y-2 rounded-xl border border-border-subtle bg-elevated p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-accent">
+              新人对话
+            </div>
+            {conversation.map((turn, index) => (
+              <div
+                key={`${turn.speaker}-${index}`}
+                className={`rounded-lg px-3 py-2 text-sm leading-6 ${
+                  turn.speaker === "learner"
+                    ? "bg-white text-text-primary"
+                    : "border border-accent/20 bg-accent/5 text-text-secondary"
+                }`}
+              >
+                <span className="mr-2 font-semibold text-accent">
+                  {turn.speaker === "learner" ? "你" : "新人"}
+                </span>
+                {turn.text}
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           value={response}
           onChange={(event) => onResponse(event.target.value)}
@@ -842,7 +870,7 @@ function GeneralizePanel({
           disabled={feedbackLoading || response.trim().length === 0}
           className="mt-3 h-10 w-full rounded-lg bg-accent text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {feedbackLoading ? "正在核对" : "核对迁移能力"}
+          {feedbackLoading ? "正在核对" : needsTeachFollowUp ? "回答新人追问" : "核对迁移能力"}
         </button>
         {feedbackError && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
@@ -944,6 +972,7 @@ function AppContent() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [generalizeFeedback, setGeneralizeFeedback] = useState<GeneralizeFeedback | null>(null);
+  const [generalizeConversation, setGeneralizeConversation] = useState<GeneralizeConversationTurn[]>([]);
   const [generalizeLoading, setGeneralizeLoading] = useState(false);
   const [generalizeError, setGeneralizeError] = useState<string | null>(null);
   const [truthContext, setTruthContext] = useState<TruthContext | null>(null);
@@ -983,6 +1012,7 @@ function AppContent() {
     setFeedback(null);
     setFeedbackError(null);
     setGeneralizeFeedback(null);
+    setGeneralizeConversation([]);
     setGeneralizeError(null);
     setTruthContext(null);
     setTruthError(null);
@@ -1178,18 +1208,33 @@ function AppContent() {
   const handleGeneralizeSubmit = async () => {
     setGeneralizeLoading(true);
     setGeneralizeError(null);
+    const submittedResponse = generalizeResponse;
+    const conversationSnapshot = designState.genVar === "Z" ? generalizeConversation : [];
     let nextFeedback: GeneralizeFeedback;
     try {
       nextFeedback = await requestClaudeGeneralizeFeedback(
         designState.genVar,
-        generalizeResponse,
+        submittedResponse,
+        conversationSnapshot,
       );
     } catch (error: unknown) {
-      nextFeedback = buildLocalGeneralizeFeedback(designState.genVar, generalizeResponse);
+      nextFeedback = buildLocalGeneralizeFeedback(
+        designState.genVar,
+        submittedResponse,
+        conversationSnapshot,
+      );
       const message = error instanceof Error ? error.message : String(error);
       setGeneralizeError(`真 Claude 暂不可用，已先用本地泛化草评：${message}`);
     }
     setGeneralizeFeedback(nextFeedback);
+    if (designState.genVar === "Z") {
+      setGeneralizeConversation((current) =>
+        appendGeneralizeConversation(current, submittedResponse, nextFeedback),
+      );
+      if (!nextFeedback.understood) {
+        setGeneralizeResponse("");
+      }
+    }
     dispatchDesign({ type: "setGeneralizeSubmitted", genSubmitted: true });
     setGeneralizeLoading(false);
   };
@@ -1403,10 +1448,13 @@ function AppContent() {
             genVar={designState.genVar}
             submitted={designState.genSubmitted}
             response={generalizeResponse}
+            conversation={generalizeConversation}
             feedback={generalizeFeedback}
             feedbackLoading={generalizeLoading}
             feedbackError={generalizeError}
             onGenVar={(genVar) => {
+              setGeneralizeResponse("");
+              setGeneralizeConversation([]);
               setGeneralizeFeedback(null);
               setGeneralizeError(null);
               dispatchDesign({ type: "setGeneralizeVariant", genVar });
@@ -1414,6 +1462,8 @@ function AppContent() {
             onResponse={setGeneralizeResponse}
             onSubmit={handleGeneralizeSubmit}
             onReset={() => {
+              setGeneralizeResponse("");
+              setGeneralizeConversation([]);
               setGeneralizeFeedback(null);
               setGeneralizeError(null);
               dispatchDesign({ type: "resetGeneralize" });

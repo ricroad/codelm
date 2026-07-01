@@ -142,6 +142,13 @@ pub struct GeneralizeFeedback {
     pub understood: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneralizeConversationTurn {
+    pub speaker: String,
+    pub text: String,
+}
+
 impl From<TruthError> for AiError {
     fn from(value: TruthError) -> Self {
         AiError::Truth(value.to_string())
@@ -475,10 +482,31 @@ fn graph_edges_summary(graph: &Value) -> String {
         .unwrap_or_else(|| "- no edges".to_string())
 }
 
+fn generalize_history_summary(history: &[GeneralizeConversationTurn]) -> String {
+    if history.is_empty() {
+        return "none".to_string();
+    }
+    history
+        .iter()
+        .take(12)
+        .map(|turn| format!("{}: {}", turn.speaker, turn.text))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn build_generalize_prompt(
     graph: &Value,
     mode: GeneralizeMode,
     user_response: &str,
+) -> Result<String, AiError> {
+    build_generalize_prompt_with_history(graph, mode, user_response, &[])
+}
+
+pub fn build_generalize_prompt_with_history(
+    graph: &Value,
+    mode: GeneralizeMode,
+    user_response: &str,
+    history: &[GeneralizeConversationTurn],
 ) -> Result<String, AiError> {
     let project_name = graph
         .get("project")
@@ -504,6 +532,9 @@ pub fn build_generalize_prompt(
 关键依赖边样本:
 {edges}
 
+历史对话:
+{history}
+
 用户回答:
 {user_response}
 
@@ -527,6 +558,7 @@ pub fn build_generalize_prompt(
         tour = graph_tour_summary(graph),
         layers = graph_layers_summary(graph),
         edges = graph_edges_summary(graph),
+        history = generalize_history_summary(history),
         user_response = user_response
     ))
 }
@@ -546,10 +578,11 @@ pub async fn request_generalize_feedback(
     graph_path: &Path,
     mode: GeneralizeMode,
     user_response: &str,
+    conversation: &[GeneralizeConversationTurn],
 ) -> Result<GeneralizeFeedback, AiError> {
     let raw = std::fs::read_to_string(graph_path).map_err(|err| AiError::Truth(err.to_string()))?;
     let graph: Value =
         serde_json::from_str(&raw).map_err(|err| AiError::ResponseParse(err.to_string()))?;
-    let prompt = build_generalize_prompt(&graph, mode, user_response)?;
+    let prompt = build_generalize_prompt_with_history(&graph, mode, user_response, conversation)?;
     call_anthropic_for_generalize(&prompt).await
 }

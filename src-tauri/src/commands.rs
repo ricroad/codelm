@@ -1,6 +1,6 @@
 use crate::ai::{
-    request_feynman_feedback, request_generalize_feedback, FeynmanFeedback, GeneralizeFeedback,
-    GeneralizeMode,
+    request_feynman_feedback, request_generalize_feedback, FeynmanFeedback,
+    GeneralizeConversationTurn, GeneralizeFeedback, GeneralizeMode,
 };
 use crate::config::{configured_project_paths, default_graph_path, default_repo_root};
 use crate::graph::{load_graph_from_paths, GraphLoadResponse};
@@ -48,11 +48,13 @@ pub async fn ai_feynman_feedback(
 pub async fn ai_generalize_feedback(
     gen_var: String,
     user_response: String,
+    conversation: Option<Vec<GeneralizeConversationTurn>>,
 ) -> Result<GeneralizeFeedback, String> {
     let (_repo_root, graph_path) = configured_project_paths()?;
     let mode = GeneralizeMode::from_str(&gen_var)
         .ok_or_else(|| format!("unknown generalize variant: {gen_var}"))?;
-    request_generalize_feedback(&graph_path, mode, &user_response)
+    let conversation = conversation.unwrap_or_default();
+    request_generalize_feedback(&graph_path, mode, &user_response, &conversation)
         .await
         .map_err(|err| err.to_string())
 }

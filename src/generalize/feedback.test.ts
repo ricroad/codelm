@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildLocalGeneralizeFeedback } from "./feedback";
+import { appendGeneralizeConversation, buildLocalGeneralizeFeedback } from "./feedback";
 
 describe("local generalize feedback", () => {
   test("scores scenario coverage across route hops", () => {
@@ -31,5 +31,15 @@ describe("local generalize feedback", () => {
 
     expect(feedback.newcomerReply).toContain("我能复述");
     expect(feedback.understood).toBe(true);
+  });
+
+  test("appends teach-newcomer dialog turns after each answer", () => {
+    const feedback = buildLocalGeneralizeFeedback("Z", "UI 表达意图，命令层负责安全。");
+    const turns = appendGeneralizeConversation([], "UI 表达意图，命令层负责安全。", feedback);
+
+    expect(turns).toEqual([
+      { speaker: "learner", text: "UI 表达意图，命令层负责安全。" },
+      { speaker: "newcomer", text: feedback.newcomerReply },
+    ]);
   });
 });

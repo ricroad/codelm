@@ -17,6 +17,11 @@ export interface GeneralizeFeedback {
   understood: boolean;
 }
 
+export interface GeneralizeConversationTurn {
+  speaker: "learner" | "newcomer";
+  text: string;
+}
+
 function includesAny(value: string, words: string[]): boolean {
   const lower = value.toLowerCase();
   return words.some((word) => lower.includes(word.toLowerCase()));
@@ -32,6 +37,7 @@ function point(hit: boolean, text: string, missText: string): GeneralizeFeedback
 export function buildLocalGeneralizeFeedback(
   genVar: GeneralizeVariant,
   response: string,
+  conversation: GeneralizeConversationTurn[] = [],
 ): GeneralizeFeedback {
   if (genVar === "Y") {
     const boundary = includesAny(response, ["命令", "边界", "commands", "command"]);
@@ -91,7 +97,9 @@ export function buildLocalGeneralizeFeedback(
       ],
       newcomerReply: understood
         ? "我能复述：UI 不直接碰模型，命令层负责安全边界、状态和错误恢复。"
-        : "我还不太懂：为什么按钮不能直接调 API？",
+        : conversation.some((turn) => turn.speaker === "newcomer")
+          ? "我还是卡住：能不能用一句更生活化的话解释 commands 层？"
+          : "我还不太懂：为什么按钮不能直接调 API？",
       understood,
     };
   }
@@ -129,4 +137,20 @@ export function buildLocalGeneralizeFeedback(
     ],
     understood: false,
   };
+}
+
+export function appendGeneralizeConversation(
+  conversation: GeneralizeConversationTurn[],
+  userResponse: string,
+  feedback: GeneralizeFeedback,
+): GeneralizeConversationTurn[] {
+  const next: GeneralizeConversationTurn[] = [...conversation];
+  const response = userResponse.trim();
+  if (response) {
+    next.push({ speaker: "learner", text: response });
+  }
+  if (feedback.newcomerReply) {
+    next.push({ speaker: "newcomer", text: feedback.newcomerReply });
+  }
+  return next;
 }

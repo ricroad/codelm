@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { GeneralizeVariant } from "../app/designState";
-import type { GeneralizeFeedback } from "./feedback";
+import type { GeneralizeConversationTurn, GeneralizeFeedback } from "./feedback";
 
 declare global {
   interface Window {
@@ -15,9 +15,14 @@ function isTauriRuntime(): boolean {
 export async function requestClaudeGeneralizeFeedback(
   genVar: GeneralizeVariant,
   userResponse: string,
+  conversation: GeneralizeConversationTurn[] = [],
 ): Promise<GeneralizeFeedback> {
   if (!isTauriRuntime()) {
     throw new Error("Claude generalize feedback requires the desktop app runtime");
   }
-  return invoke<GeneralizeFeedback>("ai_generalize_feedback", { genVar, userResponse });
+  return invoke<GeneralizeFeedback>("ai_generalize_feedback", {
+    genVar,
+    userResponse,
+    conversation,
+  });
 }

@@ -1,4 +1,7 @@
-use code_reading_lib::ai::{build_generalize_prompt, parse_generalize_feedback, GeneralizeMode};
+use code_reading_lib::ai::{
+    build_generalize_prompt, build_generalize_prompt_with_history, parse_generalize_feedback,
+    GeneralizeConversationTurn, GeneralizeMode,
+};
 
 fn fixture_graph() -> serde_json::Value {
     serde_json::json!({
@@ -87,6 +90,33 @@ fn generalize_prompt_contains_variant_and_route_map() {
     assert!(prompt.contains("Command Layer"));
     assert!(prompt.contains("UI reaches the command boundary"));
     assert!(prompt.contains("如果 hook 直接 fetch 模型"));
+}
+
+#[test]
+fn teach_newcomer_prompt_contains_dialog_history() {
+    let graph = fixture_graph();
+    let history = vec![
+        GeneralizeConversationTurn {
+            speaker: "learner".to_string(),
+            text: "UI 只表达用户意图。".to_string(),
+        },
+        GeneralizeConversationTurn {
+            speaker: "newcomer".to_string(),
+            text: "我还是不懂，为什么不能直接调 API？".to_string(),
+        },
+    ];
+    let prompt = build_generalize_prompt_with_history(
+        &graph,
+        GeneralizeMode::TeachNewcomer,
+        "因为 commands 层负责 key、安全边界和错误恢复。",
+        &history,
+    )
+    .unwrap();
+
+    assert!(prompt.contains("历史对话"));
+    assert!(prompt.contains("learner: UI 只表达用户意图。"));
+    assert!(prompt.contains("newcomer: 我还是不懂，为什么不能直接调 API？"));
+    assert!(prompt.contains("因为 commands 层负责 key、安全边界和错误恢复。"));
 }
 
 #[test]
