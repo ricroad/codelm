@@ -30,6 +30,7 @@ import {
   composeFollowUpExplanation,
   type FeynmanFeedback,
 } from "../feynman/feedback";
+import { buildTruthChecklist, scoreTruthChecklist } from "../feynman/alignment";
 import { loadTruthContext, type TruthContext, type TruthEdge } from "../feynman/truth";
 import { requestClaudeGeneralizeFeedback } from "../generalize/ai";
 import {
@@ -977,20 +978,37 @@ function LearnOverlay({
 }) {
   if (variant === "A" || !node) return null;
   const isDiff = variant === "C";
-  const checklist = [
-    `职责：${truthContext?.node.summary ?? node.summary}`,
-    truthContext?.layer ? `分层：${truthContext.layer.name} · ${truthContext.layer.description}` : null,
-    ...((truthContext?.outgoingEdges ?? []).slice(0, 2).map((edge) => `出边：${edge.relation} → ${edge.otherNodeName}`)),
-    ...((truthContext?.incomingEdges ?? []).slice(0, 2).map((edge) => `入边：${edge.otherNodeName} → ${edge.relation}`)),
-  ].filter(Boolean);
+  const liveChecklist = buildTruthChecklist(node, truthContext);
+  const liveScore = scoreTruthChecklist(liveChecklist, explanation);
+  const firstMissing = liveScore.items.find((item) => !item.aligned);
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#e8e8ed]/75 p-10 backdrop-blur-sm">
+    <div
+      data-testid="learn-overlay"
+      className="absolute inset-0 z-20 flex items-center justify-center bg-[#e8e8ed]/75 p-10 backdrop-blur-sm"
+    >
       <div className="grid max-h-full w-[min(980px,100%)] grid-cols-2 gap-5 overflow-auto rounded-2xl border border-border-subtle bg-white p-5 shadow-2xl">
         <section>
-          <div className="text-xs font-semibold uppercase tracking-wide text-accent">
-            {isDiff ? "代码真相清单" : "专注讲台"}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-accent">
+                {isDiff ? "代码真相清单" : "专注讲台"}
+              </div>
+              <h3 className="mt-2 text-2xl font-semibold">{node.name}</h3>
+            </div>
+            {isDiff && (
+              <div className="shrink-0 text-right">
+                <div className="font-mono text-sm text-accent" data-testid="live-alignment-score">
+                  {liveScore.aligned}/{liveScore.total}
+                </div>
+                <div className="mt-1 text-[11px] text-text-muted">{liveScore.percent}%</div>
+              </div>
+            )}
           </div>
-          <h3 className="mt-2 text-2xl font-semibold">{node.name}</h3>
+          {isDiff && (
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-elevated">
+              <div className="h-full bg-accent transition-all" style={{ width: `${liveScore.percent}%` }} />
+            </div>
+          )}
           <p className="mt-3 text-sm leading-6 text-text-secondary">{node.summary}</p>
           {truthLoading && (
             <div className="mt-4 rounded-lg bg-elevated p-3 text-xs text-text-muted">
@@ -1008,10 +1026,29 @@ function LearnOverlay({
             </pre>
           )}
           {isDiff && (
-            <div className="mt-4 space-y-2">
-              {(checklist.length > 0 ? checklist : ["职责", "分层位置", "关键依赖流向", "上下游影响"]).map((item, index) => (
-                <div key={item} className="rounded-lg bg-elevated p-3 text-sm">
-                  {index + 1}. {item}
+            <div className="mt-4 space-y-2" data-testid="live-alignment-checklist">
+              {liveScore.items.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`rounded-lg border p-3 text-sm transition ${
+                    item.aligned
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-border-subtle bg-elevated text-text-secondary"
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span
+                      className={`mt-0.5 h-5 w-5 shrink-0 rounded-full text-center text-[11px] leading-5 text-white ${
+                        item.aligned ? "bg-emerald-500" : "bg-text-muted"
+                      }`}
+                    >
+                      {item.aligned ? "✓" : index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="font-semibold">{item.label}</div>
+                      <div className="mt-1 line-clamp-2 text-xs leading-5">{item.evidence}</div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1022,11 +1059,19 @@ function LearnOverlay({
             {isDiff ? "你的讲解" : "对着源码讲"}
           </label>
           <textarea
+            data-testid="learn-overlay-explanation"
             value={explanation}
             onChange={(event) => onExplanation(event.target.value)}
             className="mt-2 h-48 w-full resize-none rounded-xl border border-border-subtle bg-elevated p-3 text-sm leading-6 outline-none focus:border-accent"
             placeholder="先讲职责，再讲边界，最后讲依赖流向。"
           />
+          {isDiff && (
+            <div className="mt-3 rounded-lg border border-border-subtle bg-elevated p-3 text-xs leading-5 text-text-secondary">
+              {firstMissing
+                ? `下一句补：${firstMissing.label} · ${firstMissing.evidence}`
+                : "真相清单已全部对齐，可以提交给 Claude 做最终核对。"}
+            </div>
+          )}
           <button
             type="button"
             onClick={onSubmit}
