@@ -9,7 +9,7 @@ use crate::truth::{build_truth_context, TruthContext, TruthError};
 
 const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
-const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
+pub const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 
 #[derive(Debug, Error)]
 pub enum AiError {
@@ -306,12 +306,28 @@ fn api_key_from_env() -> Result<String, AiError> {
         .map_err(|_| AiError::MissingApiKey)
 }
 
-fn model_from_env() -> String {
-    std::env::var("ANTHROPIC_MODEL")
-        .ok()
+pub fn select_model(
+    env_model: Option<String>,
+    saved_model: Option<String>,
+    default_model: &str,
+) -> String {
+    env_model
         .map(|model| model.trim().to_string())
         .filter(|model| !model.is_empty())
-        .unwrap_or_else(|| DEFAULT_MODEL.to_string())
+        .or(saved_model)
+        .unwrap_or_else(|| default_model.to_string())
+}
+
+fn configured_model() -> String {
+    let env_model = std::env::var("ANTHROPIC_MODEL")
+        .ok()
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty());
+    select_model(
+        env_model,
+        settings::load_saved_model().ok().flatten(),
+        DEFAULT_MODEL,
+    )
 }
 
 fn messages_url_from_env() -> String {
@@ -324,7 +340,7 @@ fn messages_url_from_env() -> String {
 
 async fn call_anthropic(prompt: &str) -> Result<FeynmanFeedback, AiError> {
     let key = api_key_from_env()?;
-    let model = model_from_env();
+    let model = configured_model();
     let request = build_anthropic_request(&model, prompt);
     let response = reqwest::Client::new()
         .post(messages_url_from_env())
@@ -366,7 +382,7 @@ async fn call_anthropic(prompt: &str) -> Result<FeynmanFeedback, AiError> {
 
 async fn call_anthropic_for_generalize(prompt: &str) -> Result<GeneralizeFeedback, AiError> {
     let key = api_key_from_env()?;
-    let model = model_from_env();
+    let model = configured_model();
     let request = build_generalize_anthropic_request(&model, prompt);
     let response = reqwest::Client::new()
         .post(messages_url_from_env())

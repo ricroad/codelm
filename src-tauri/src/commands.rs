@@ -1,6 +1,6 @@
 use crate::ai::{
     request_feynman_feedback, request_generalize_feedback, FeynmanFeedback,
-    GeneralizeConversationTurn, GeneralizeFeedback, GeneralizeMode,
+    GeneralizeConversationTurn, GeneralizeFeedback, GeneralizeMode, DEFAULT_MODEL,
 };
 use crate::config::{configured_project_paths, default_graph_path, default_repo_root};
 use crate::graph::{load_graph_from_paths, GraphLoadResponse};
@@ -8,9 +8,10 @@ use crate::progress::{
     load_progress as load_progress_file, save_progress as save_progress_file, LearningProgress,
 };
 use crate::settings::{
-    api_key_status as api_key_status_file, clear_api_key as clear_api_key_file,
-    project_paths as project_paths_file, save_api_key as save_api_key_file,
-    save_project_paths as save_project_paths_file, ApiKeyStatus, ProjectPaths,
+    ai_model_settings as ai_model_settings_file, api_key_status as api_key_status_file,
+    clear_api_key as clear_api_key_file, project_paths as project_paths_file,
+    save_ai_model_settings as save_ai_model_settings_file, save_api_key as save_api_key_file,
+    save_project_paths as save_project_paths_file, AiModelSettings, ApiKeyStatus, ProjectPaths,
 };
 use crate::source::{read_source_from_repo, SourceFile};
 use crate::truth::{build_truth_context, TruthContext};
@@ -82,6 +83,16 @@ pub fn save_api_key(api_key: String) -> Result<ApiKeyStatus, String> {
 #[tauri::command]
 pub fn clear_api_key() -> Result<ApiKeyStatus, String> {
     clear_api_key_file().map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub fn ai_model_settings() -> Result<AiModelSettings, String> {
+    ai_model_settings_file(DEFAULT_MODEL).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub fn save_ai_model_settings(model: String) -> Result<AiModelSettings, String> {
+    save_ai_model_settings_file(&model, DEFAULT_MODEL).map_err(|err| err.to_string())
 }
 
 #[tauri::command]

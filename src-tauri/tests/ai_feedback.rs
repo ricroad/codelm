@@ -1,4 +1,6 @@
-use code_reading_lib::ai::{build_anthropic_request, build_feynman_prompt, parse_feynman_feedback};
+use code_reading_lib::ai::{
+    build_anthropic_request, build_feynman_prompt, parse_feynman_feedback, select_model,
+};
 use code_reading_lib::truth::{SourceSnippet, TruthContext, TruthEdge, TruthLayer, TruthNode};
 
 fn fixture_context() -> TruthContext {
@@ -68,6 +70,23 @@ fn anthropic_request_uses_messages_api_shape() {
     assert_eq!(request["messages"][0]["role"], "user");
     assert_eq!(request["messages"][0]["content"], "请按 JSON 返回");
     assert!(request["system"].as_str().unwrap().contains("费曼"));
+}
+
+#[test]
+fn model_selection_prefers_env_then_settings_then_default() {
+    assert_eq!(
+        select_model(
+            Some(" claude-env ".to_string()),
+            Some("claude-settings".to_string()),
+            "claude-default"
+        ),
+        "claude-env",
+    );
+    assert_eq!(
+        select_model(None, Some("claude-settings".to_string()), "claude-default"),
+        "claude-settings",
+    );
+    assert_eq!(select_model(None, None, "claude-default"), "claude-default");
 }
 
 #[test]

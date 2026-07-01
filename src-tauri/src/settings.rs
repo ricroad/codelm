@@ -19,6 +19,7 @@ pub enum SettingsError {
 #[serde(rename_all = "camelCase")]
 struct LocalSettings {
     anthropic_api_key: Option<String>,
+    anthropic_model: Option<String>,
     repo_root: Option<String>,
     graph_path: Option<String>,
 }
@@ -36,6 +37,14 @@ pub struct ApiKeyStatus {
 pub struct ProjectPaths {
     pub repo_root: String,
     pub graph_path: String,
+    pub configured: bool,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelSettings {
+    pub model: String,
     pub configured: bool,
     pub source: String,
 }
@@ -83,6 +92,47 @@ pub fn load_api_key_at_path(path: &Path) -> Result<Option<String>, SettingsError
         .anthropic_api_key
         .map(|key| key.trim().to_string())
         .filter(|key| !key.is_empty()))
+}
+
+pub fn load_saved_model_at_path(path: &Path) -> Result<Option<String>, SettingsError> {
+    Ok(read_settings(path)?
+        .anthropic_model
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty()))
+}
+
+pub fn load_ai_model_settings_at_path(
+    path: &Path,
+    default_model: &str,
+) -> Result<AiModelSettings, SettingsError> {
+    match load_saved_model_at_path(path)? {
+        Some(model) => Ok(AiModelSettings {
+            model,
+            configured: true,
+            source: "settings".to_string(),
+        }),
+        None => Ok(AiModelSettings {
+            model: default_model.to_string(),
+            configured: false,
+            source: "default".to_string(),
+        }),
+    }
+}
+
+pub fn save_ai_model_settings_at_path(
+    path: &Path,
+    model: &str,
+    default_model: &str,
+) -> Result<AiModelSettings, SettingsError> {
+    let mut settings = read_settings(path)?;
+    let trimmed = model.trim();
+    settings.anthropic_model = if trimmed.is_empty() || trimmed == default_model {
+        None
+    } else {
+        Some(trimmed.to_string())
+    };
+    write_settings(path, &settings)?;
+    load_ai_model_settings_at_path(path, default_model)
 }
 
 fn repo_default_graph_path(repo_root: &Path) -> PathBuf {
@@ -187,6 +237,10 @@ pub fn load_saved_api_key() -> Result<Option<String>, SettingsError> {
     load_api_key_at_path(&settings_path()?)
 }
 
+pub fn load_saved_model() -> Result<Option<String>, SettingsError> {
+    load_saved_model_at_path(&settings_path()?)
+}
+
 pub fn api_key_status() -> Result<ApiKeyStatus, SettingsError> {
     if let Ok(key) = std::env::var("ANTHROPIC_API_KEY").or_else(|_| std::env::var("CLAUDE_API_KEY"))
     {
@@ -208,6 +262,27 @@ pub fn save_api_key(api_key: &str) -> Result<ApiKeyStatus, SettingsError> {
 
 pub fn clear_api_key() -> Result<ApiKeyStatus, SettingsError> {
     clear_api_key_at_path(&settings_path()?)
+}
+
+pub fn ai_model_settings(default_model: &str) -> Result<AiModelSettings, SettingsError> {
+    if let Ok(model) = std::env::var("ANTHROPIC_MODEL") {
+        let trimmed = model.trim();
+        if !trimmed.is_empty() {
+            return Ok(AiModelSettings {
+                model: trimmed.to_string(),
+                configured: true,
+                source: "env".to_string(),
+            });
+        }
+    }
+    load_ai_model_settings_at_path(&settings_path()?, default_model)
+}
+
+pub fn save_ai_model_settings(
+    model: &str,
+    default_model: &str,
+) -> Result<AiModelSettings, SettingsError> {
+    save_ai_model_settings_at_path(&settings_path()?, model, default_model)
 }
 
 pub fn project_paths(

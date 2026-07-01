@@ -42,13 +42,17 @@ import {
 } from "../progress/progress";
 import { loadStoredProgress, saveStoredProgress } from "../progress/persistence";
 import {
+  aiModelSettingsLabel,
   apiKeyStatusLabel,
   clearApiKey,
+  loadAiModelSettings,
   loadApiKeyStatus,
   loadProjectPaths,
   projectPathsLabel,
+  saveAiModelSettings,
   saveApiKey,
   saveProjectPaths,
+  type AiModelSettings,
   type ApiKeyStatus,
   type ProjectPaths,
 } from "./settings";
@@ -137,40 +141,53 @@ function ModeTabs({
 
 function SettingsPanel({
   status,
+  aiModelSettings,
   projectPaths,
   draftKey,
+  aiModelDraft,
   repoRootDraft,
   graphPathDraft,
   saving,
+  aiModelSaving,
   projectPathsSaving,
   error,
+  aiModelError,
   projectPathsError,
   onDraftKey,
+  onAiModelDraft,
   onRepoRootDraft,
   onGraphPathDraft,
   onSave,
+  onSaveAiModel,
   onClear,
   onSaveProjectPaths,
   onClose,
 }: {
   status: ApiKeyStatus;
+  aiModelSettings: AiModelSettings;
   projectPaths: ProjectPaths;
   draftKey: string;
+  aiModelDraft: string;
   repoRootDraft: string;
   graphPathDraft: string;
   saving: boolean;
+  aiModelSaving: boolean;
   projectPathsSaving: boolean;
   error: string | null;
+  aiModelError: string | null;
   projectPathsError: string | null;
   onDraftKey: (value: string) => void;
+  onAiModelDraft: (value: string) => void;
   onRepoRootDraft: (value: string) => void;
   onGraphPathDraft: (value: string) => void;
   onSave: () => void;
+  onSaveAiModel: () => void;
   onClear: () => void;
   onSaveProjectPaths: () => void;
   onClose: () => void;
 }) {
   const desktopRequired = status.source === "desktop-required";
+  const aiModelLocked = aiModelSettings.source === "desktop-required" || aiModelSettings.source === "env";
   const projectPathsDesktopRequired = projectPaths.source === "desktop-required";
   return (
     <div className="absolute right-5 top-[62px] z-50 max-h-[calc(100vh-88px)] w-[min(520px,calc(100vw-40px))] overflow-auto rounded-xl border border-border-subtle bg-white p-4 shadow-2xl">
@@ -178,7 +195,7 @@ function SettingsPanel({
         <div>
           <div className="text-sm font-semibold">设置</div>
           <div className="mt-1 text-xs text-text-muted">
-            API {apiKeyStatusLabel(status)} · 路径 {projectPathsLabel(projectPaths)}
+            API {apiKeyStatusLabel(status)} · 模型 {aiModelSettingsLabel(aiModelSettings)} · 路径 {projectPathsLabel(projectPaths)}
           </div>
         </div>
         <button
@@ -205,6 +222,27 @@ function SettingsPanel({
           placeholder={desktopRequired ? "桌面 App 中可保存 key" : "sk-ant-api03-..."}
           type="password"
         />
+        <label className="mt-3 block text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+          Model
+        </label>
+        <div className="mt-2 flex gap-2">
+          <input
+            value={aiModelDraft}
+            onChange={(event) => onAiModelDraft(event.target.value)}
+            disabled={aiModelLocked}
+            className="h-10 min-w-0 flex-1 rounded-lg border border-border-subtle bg-elevated px-3 font-mono text-xs outline-none focus:border-accent disabled:opacity-50"
+            placeholder="claude-sonnet-4-6"
+          />
+          <button
+            type="button"
+            onClick={onSaveAiModel}
+            disabled={aiModelLocked || aiModelSaving || aiModelDraft.trim().length === 0}
+            className="h-10 w-24 rounded-lg border border-border-subtle bg-white text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {aiModelSaving ? "保存中" : "保存模型"}
+          </button>
+        </div>
+        <div className="mt-2 text-xs text-text-muted">{aiModelSettingsLabel(aiModelSettings)}</div>
         <div className="mt-4 flex gap-2">
           <button
             type="button"
@@ -265,6 +303,11 @@ function SettingsPanel({
       {error && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
           {error}
+        </div>
+      )}
+      {aiModelError && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          {aiModelError}
         </div>
       )}
       {projectPathsError && (
@@ -988,6 +1031,14 @@ function AppContent() {
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [apiKeySaving, setApiKeySaving] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [aiModelSettings, setAiModelSettings] = useState<AiModelSettings>({
+    model: "",
+    configured: false,
+    source: "desktop-required",
+  });
+  const [aiModelDraft, setAiModelDraft] = useState("");
+  const [aiModelSaving, setAiModelSaving] = useState(false);
+  const [aiModelError, setAiModelError] = useState<string | null>(null);
   const [projectPaths, setProjectPaths] = useState<ProjectPaths>({
     repoRoot: "",
     graphPath: "",
@@ -1075,6 +1126,24 @@ function AppContent() {
       .catch((error: unknown) => {
         if (cancelled) return;
         setApiKeyError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAiModelSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setAiModelSettings(settings);
+        setAiModelDraft(settings.model);
+        setAiModelError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setAiModelError(error instanceof Error ? error.message : String(error));
       });
     return () => {
       cancelled = true;
@@ -1267,6 +1336,20 @@ function AppContent() {
     }
   };
 
+  const handleSaveAiModel = async () => {
+    setAiModelSaving(true);
+    setAiModelError(null);
+    try {
+      const nextSettings = await saveAiModelSettings(aiModelDraft);
+      setAiModelSettings(nextSettings);
+      setAiModelDraft(nextSettings.model);
+    } catch (error: unknown) {
+      setAiModelError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAiModelSaving(false);
+    }
+  };
+
   const handleSaveProjectPaths = async () => {
     setProjectPathsSaving(true);
     setProjectPathsError(null);
@@ -1286,18 +1369,24 @@ function AppContent() {
   const settingsPanel = settingsOpen ? (
     <SettingsPanel
       status={apiStatus}
+      aiModelSettings={aiModelSettings}
       projectPaths={projectPaths}
       draftKey={apiKeyDraft}
+      aiModelDraft={aiModelDraft}
       repoRootDraft={repoRootDraft}
       graphPathDraft={graphPathDraft}
       saving={apiKeySaving}
+      aiModelSaving={aiModelSaving}
       projectPathsSaving={projectPathsSaving}
       error={apiKeyError}
+      aiModelError={aiModelError}
       projectPathsError={projectPathsError}
       onDraftKey={setApiKeyDraft}
+      onAiModelDraft={setAiModelDraft}
       onRepoRootDraft={setRepoRootDraft}
       onGraphPathDraft={setGraphPathDraft}
       onSave={handleSaveApiKey}
+      onSaveAiModel={handleSaveAiModel}
       onClear={handleClearApiKey}
       onSaveProjectPaths={handleSaveProjectPaths}
       onClose={() => setSettingsOpen(false)}

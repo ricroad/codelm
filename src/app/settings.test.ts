@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { apiKeyStatusLabel, projectPathsLabel } from "./settings";
+import { aiModelSettingsLabel, apiKeyStatusLabel, projectPathsLabel } from "./settings";
 
 describe("settings helpers", () => {
   test("labels key status sources", () => {
@@ -36,6 +36,37 @@ describe("settings helpers", () => {
       projectPathsLabel({
         repoRoot: "",
         graphPath: "",
+        configured: false,
+        source: "desktop-required",
+      }),
+    ).toBe("请在桌面 App 中配置");
+  });
+
+  test("labels AI model setting sources", () => {
+    expect(
+      aiModelSettingsLabel({
+        model: "claude-sonnet-4-6",
+        configured: false,
+        source: "default",
+      }),
+    ).toBe("默认模型 · claude-sonnet-4-6");
+    expect(
+      aiModelSettingsLabel({
+        model: "claude-opus-4-8",
+        configured: true,
+        source: "settings",
+      }),
+    ).toBe("本地设置 · claude-opus-4-8");
+    expect(
+      aiModelSettingsLabel({
+        model: "claude-env-model",
+        configured: true,
+        source: "env",
+      }),
+    ).toBe("环境变量 · claude-env-model");
+    expect(
+      aiModelSettingsLabel({
+        model: "",
         configured: false,
         source: "desktop-required",
       }),
