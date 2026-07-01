@@ -76,14 +76,17 @@ export function progressSummary(
   graph: KnowledgeGraph,
   progress: LearningProgress,
 ): ProgressSummary {
+  const graphNodeIds = new Set(graph.nodes.map((node) => node.id));
   const mastered = new Set(
     Object.entries(progress.nodes)
-      .filter(([, value]) => value.status === "mastered")
+      .filter(([nodeId, value]) => graphNodeIds.has(nodeId) && value.status === "mastered")
       .map(([nodeId]) => nodeId),
   );
   const weakPoints = [
     ...new Set(
-      Object.values(progress.nodes)
+      Object.entries(progress.nodes)
+        .filter(([nodeId]) => graphNodeIds.has(nodeId))
+        .map(([, node]) => node)
         .flatMap((node) => node.weakConcepts)
         .filter(Boolean),
     ),

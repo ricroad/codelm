@@ -35,4 +35,18 @@ describe("progress", () => {
     expect(summary.completedTourSteps).toBe(1);
     expect(summary.weakPoints).toEqual(["命令层隔离"]);
   });
+
+  test("ignores progress entries outside the current graph", () => {
+    const polluted = recordMastery(
+      recordMastery(createEmptyProgress(), "old-project-node", ["旧项目薄弱点"]),
+      "n1",
+      ["命令层隔离"],
+    );
+    const summary = progressSummary(graph, polluted);
+
+    expect(summary.masteredNodes).toBe(1);
+    expect(summary.masteryPercent).toBe(50);
+    expect(summary.completedTourSteps).toBe(1);
+    expect(summary.weakPoints).toEqual(["命令层隔离"]);
+  });
 });
